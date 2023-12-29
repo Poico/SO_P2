@@ -17,7 +17,7 @@ typedef struct {
 	char opcode;
 	char request_fifo_name[40];
 	char response_fifo_name[40];
-} __attribute__((packed)) setup_message;
+} __attribute__((packed)) setup_request;
 
 typedef struct {
 	int session_id;
@@ -25,7 +25,7 @@ typedef struct {
 
 typedef struct {
 	char opcode;
-} __attribute__((packed)) quit_message;
+} __attribute__((packed)) quit_request;
 
 //NOT NEEDED: quit_response
 
@@ -34,13 +34,17 @@ typedef struct {
 	unsigned int event_id;
 	size_t num_rows;
 	size_t num_cols;
-} __attribute__((packed)) create_message;
+} __attribute__((packed)) create_request;
 
 typedef struct {
 	int return_code;
 } __attribute__((packed)) create_response;
 
-//CANT DO YET: TODO: reserve_message
+typedef struct {
+	char opcode;
+	unsigned int event_id;
+	size_t num_seats;
+} __attribute__((packed)) reserve_request;
 
 typedef struct {
 	int return_code;
@@ -49,14 +53,21 @@ typedef struct {
 typedef struct {
 	char opcode;
 	unsigned int event_id;
-} __attribute__((packed)) show_message;
+} __attribute__((packed)) show_request;
 
-//CANT DO YET: TODO: show_response
+typedef struct {
+	int return_code;
+	size_t num_rows;
+	size_t num_cols;
+} __attribute__((packed)) show_response;
 
 typedef struct {
 	char opcode;
-} __attribute__((packed)) list_message;
+} __attribute__((packed)) list_request;
 
-//CANT DO YET: TODO: list_response
+typedef struct {
+	int return_code;
+	size_t num_events;
+} __attribute__((packed)) list_response;
 
 #endif
