@@ -74,23 +74,55 @@ void init_server() {
 
 void accept_client() {
   // TODO: Accept client's pipes (read from main pipe)
-  // TODO: Pass to client handler thread (it will take care of the rest)
-
-  /*if(read(registerFIFO, &request, sizeof(request)) == -1){
-    fprintf(stderr, "Error reading from pipe\n");
+  int client_pipe;
+  if (read(registerFIFO, &client_pipe, sizeof(int)) == -1) {
+    fprintf(stderr, "Error reading client pipe from main pipe\n");
     exit(1);
-  }*/
-  //  TODO: Write new client to the producer-consumer buffer
+  }
+
+  // TODO: Pass to client handler thread (it will take care of the rest)
+  // create_thread(client_handler_thread, &client_pipe);
+
+  // TODO: Write new client to the producer-consumer buffer
 }
 
 // Each worker thread enters this function once for each client
 void handle_client() {
   // TODO: Open pipes provided by client
+  int client_pipe = open(FIFO_path, O_RDWR);
+  if (client_pipe == -1) {
+    fprintf(stderr, "Error opening client pipe\n");
+    exit(1);
+  }
+
   // TODO: Work loop
+  while (1) {
     // TODO: Read request
+    Request request;
+    if (read(client_pipe, &request, sizeof(Request)) == -1) {
+      fprintf(stderr, "Error reading request from client\n");
+      exit(1);
+    }
+
     // TODO: Process request
+    // process_request(request);
+
     // TODO: Give response to client
+    // Response response = create_response();
+    // write(client_pipe, &response, sizeof(Response));
+
+    // TODO: Check if client wants to exit
+    if (request.type == EXIT_REQUEST) {
+      break;
+    }
+  }
+
   // TODO: Close pipes
+  if (close(client_pipe) == -1) {
+    fprintf(stderr, "Error closing client pipe\n");
+    exit(1);
+  }
+
   // TODO: Return to "waiting for client" mode
 }
 
