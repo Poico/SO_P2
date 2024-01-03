@@ -88,11 +88,7 @@ void accept_client() {
   // TODO: Pass to client handler thread (it will take care of the rest)
   handle_client();
 
-  /*if(read(registerFIFO, &request, sizeof(request)) == -1){
-    fprintf(stderr, "Error reading from pipe\n");
-    exit(1);
-  }*/
-  //  TODO: Write new client to the producer-consumer buffer
+  // TODO: Write new client to the producer-consumer buffer
 }
 
 // Each worker thread enters this function once for each client
@@ -108,6 +104,11 @@ void handle_client() {
   // TODO: Process request
   // TODO: Give response to client
   // TODO: Close pipes
+  if (close(client_pipe) == -1) {
+    fprintf(stderr, "Error closing client pipe\n");
+    exit(1);
+  }
+
   // TODO: Return to "waiting for client" mode
 }
 
