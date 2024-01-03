@@ -23,6 +23,10 @@ static struct Event* get_event_with_delay(unsigned int event_id, struct ListNode
   return get_event(event_list, event_id, from, to);
 }
 
+struct EventList* get_event_list(){
+  return event_list;
+}
+
 /// Gets the index of a seat.
 /// @note This function assumes that the seat exists.
 /// @param event Event to get the seat index from.

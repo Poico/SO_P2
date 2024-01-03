@@ -127,16 +127,20 @@ void close_server() {
 }
 
 void handle_SIGUSR1(int signum) {
-  //TODO: Remover
-  int NUM_EVENTS = 0;
-  EventList* events = ems_get_events(&NUM_EVENTS);
-  //TODO: Remover
-
+  struct EventList* event_list = NULL;
+  event_list = get_event_list();
+  
+  if (event_list == NULL) {
+    fprintf(stderr, "Error getting event list\n");
+    return;
+  }
 
   // Loop through all events to memorize their information
-  for (int i = 0; i < NUM_EVENTS; ++i) {
-    pthread_mutex_lock(&events[i].mutex);
-    ems_show(1,events[i].event);
-    pthread_mutex_unlock(&events[i].mutex);
+  struct ListNode* node = event_list->head;
+  while (node != NULL) {
+    pthread_mutex_lock(&node->event->mutex);
+    ems_show(1, node->event);
+    pthread_mutex_unlock(&node->event->mutex);
+    node = node->next;
   }
 }
