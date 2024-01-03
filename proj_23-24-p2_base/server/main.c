@@ -19,6 +19,7 @@ void init_server();
 void handle_client();
 void close_server();
 void handle_SIGUSR1(int signum);
+void close_server_threads();
 
 unsigned int state_access_delay_us;
 int registerFIFO;
@@ -121,7 +122,7 @@ void close_server() {
     fprintf(stderr, "Error closing register FIFO\n");
     exit(1);
   }
-  // LATER: TODO: Close server threads
+  close_server_threads();
   ems_terminate();
   exit(0);
 }
@@ -129,7 +130,7 @@ void close_server() {
 void handle_SIGUSR1(int signum) {
   struct EventList* event_list = NULL;
   event_list = get_event_list();
-  
+
   if (event_list == NULL) {
     fprintf(stderr, "Error getting event list\n");
     return;
@@ -142,5 +143,16 @@ void handle_SIGUSR1(int signum) {
     ems_show(1, node->event);
     pthread_mutex_unlock(&node->event->mutex);
     node = node->next;
+  }
+}
+
+void close_server_threads() {
+  // TODO: Implement closing server threads
+  // Code to close server threads goes here
+  // For example, you can use pthread_cancel() to cancel the threads
+
+  // Assuming you have an array of pthread_t for the server threads
+  for (int i = 0; i < NUM_SERVER_THREADS; i++) {
+    pthread_cancel(server_threads[i]);
   }
 }
