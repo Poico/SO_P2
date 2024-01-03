@@ -1,3 +1,4 @@
+#include <asm/signal.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
@@ -8,22 +9,26 @@
 
 #include "common/constants.h"
 #include "common/io.h"
+#include "common/messages.h"
 #include "operations.h"
+#include "eventlist.h"
 
 int parse_args(int argc, char* argv[]);
 void init_server();
 
 void handle_client();
 void close_server();
+void handle_SIGUSR1(int signum);
 
 unsigned int state_access_delay_us;
 int registerFIFO;
-char *FIFO_path;
+char* FIFO_path;
 volatile char server_should_quit;
 
 int main(int argc, char* argv[]) {
   int ret = parse_args(argc, argv);
   if (ret) return ret;
+  signal(SIGUSR1, handle_SIGUSR1);
 
   // Initialize EMS
   if (ems_init(state_access_delay_us)) {
@@ -59,8 +64,7 @@ int parse_args(int argc, char* argv[]) {
 
     state_access_delay_us = (unsigned int)delay;
   }
-  if (argc >= 2)
-  {
+  if (argc >= 2) {
     FIFO_path = argv[1];
   }
 }
@@ -74,7 +78,15 @@ void init_server() {
 
 void accept_client() {
   // TODO: Accept client's pipes (read from main pipe)
+  request request;
+  if (read(registerFIFO, &request, sizeof(request)) == -1) {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
+  request.session_id = 1;
+
   // TODO: Pass to client handler thread (it will take care of the rest)
+  handle_client();
 
   /*if(read(registerFIFO, &request, sizeof(request)) == -1){
     fprintf(stderr, "Error reading from pipe\n");
@@ -85,11 +97,16 @@ void accept_client() {
 
 // Each worker thread enters this function once for each client
 void handle_client() {
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGUSR1);
+  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
   // TODO: Open pipes provided by client
+
   // TODO: Work loop
-    // TODO: Read request
-    // TODO: Process request
-    // TODO: Give response to client
+  // TODO: Read request
+  // TODO: Process request
+  // TODO: Give response to client
   // TODO: Close pipes
   // TODO: Return to "waiting for client" mode
 }
@@ -106,4 +123,19 @@ void close_server() {
   // LATER: TODO: Close server threads
   ems_terminate();
   exit(0);
+}
+
+void handle_SIGUSR1(int signum) {
+  //TODO: Remover
+  int NUM_EVENTS = 0;
+  EventList* events = ems_get_events(&NUM_EVENTS);
+  //TODO: Remover
+
+
+  // Loop through all events to memorize their information
+  for (int i = 0; i < NUM_EVENTS; ++i) {
+    pthread_mutex_lock(&events[i].mutex);
+    ems_show(1,events[i].event);
+    pthread_mutex_unlock(&events[i].mutex);
+  }
 }
