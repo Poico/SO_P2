@@ -175,7 +175,11 @@ int process_command(int req_fd, int resp_fd)
   // TODO: Error checking
   // TODO: Read request
   core_request core;
-  read(req_fd, &core, sizeof(core_request));
+  if(read(req_fd, &core, sizeof(core_request)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
   // TODO: Do something with session ID?
 
   // TODO: Maybe break down into more functions
@@ -201,7 +205,7 @@ int process_command(int req_fd, int resp_fd)
 
     case MSG_SETUP:
     default:
-      // TODO: Error message?
+      fprintf(stderr, "Invalid opcode\n");
       return 0;
   }
 
@@ -213,53 +217,83 @@ int process_command(int req_fd, int resp_fd)
 
 void handle_create(int req_fd, int resp_fd)
 {
-  // TODO: Error checking
   create_request req;
-  read(req_fd, &req, sizeof(create_request));
+  if(read(req_fd, &req, sizeof(create_request)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
 
   int ret = ems_create(req.event_id, req.num_rows, req.num_cols);
 
   create_response resp = { .return_code = ret };
-  write(resp_fd, &resp, sizeof(create_response));
+  if(write(resp_fd, &resp, sizeof(create_response)) == -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
 }
 
 void handle_reserve(int req_fd, int resp_fd)
 {
-  // TODO: Error checking
   reserve_request req;
-  read(req_fd, &req, sizeof(reserve_request));
+  if(read(req_fd, &req, sizeof(reserve_request)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
 
   size_t *xs = malloc(req.num_seats * sizeof(size_t));
   size_t *ys = malloc(req.num_seats * sizeof(size_t));
+  if(read(req_fd, xs, req.num_seats * sizeof(size_t)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
 
-  read(req_fd, xs, req.num_seats * sizeof(size_t));
-  read(req_fd, ys, req.num_seats * sizeof(size_t));
+  if(read(req_fd, ys, req.num_seats * sizeof(size_t)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
 
   int ret = ems_reserve(req.event_id, req.num_seats, xs, ys);
 
   reserve_response resp = { .return_code = ret };
-  write(resp_fd, &resp, sizeof(reserve_response));
+  if(write(resp_fd, &resp, sizeof(reserve_response)) == -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
 }
 
 void handle_show(int req_fd, int resp_fd)
 {
-  // TODO: Error checking
   show_request req;
-  read(req_fd, &req, sizeof(show_request));
+  if(read(req_fd, &req, sizeof(show_request)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
 
   // TODO: Process show
+  
+  //Mandar uma lista para o pipe
 
   show_response resp;
   resp.num_cols = ;
   resp.num_rows = ;
   resp.return_code = ;
-  write(resp_fd, &resp, sizeof(show_response));
+  if(write(resp_fd, &resp, sizeof(show_response)) == -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
   //TODO: Write data
 }
 
 void handle_list(int req_fd, int resp_fd)
 {
-  // TODO: Error checking
   //No need to read request, has no extra data
 
   //TODO: Process list
@@ -267,6 +301,10 @@ void handle_list(int req_fd, int resp_fd)
   list_response resp;
   resp.num_events = ;
   resp.return_code = ;
-  write(resp_fd, &resp, sizeof(list_response));
+  if(write(resp_fd, &resp, sizeof(list_response)) == -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
   //TODO: Write data
 }

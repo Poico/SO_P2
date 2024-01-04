@@ -27,6 +27,7 @@ struct EventList* get_event_list(){
   return event_list;
 }
 
+
 /// Gets the index of a seat.
 /// @note This function assumes that the seat exists.
 /// @param event Event to get the seat index from.
@@ -232,6 +233,43 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   pthread_mutex_unlock(&event->mutex);
   return 0;
+}
+//TODO: review
+int* ems_show_to_client(unsigned int event_id){
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return NULL;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return NULL;
+  }
+
+  struct Event* event = get_event_with_delay(event_id, event_list->head, event_list->tail);
+
+  pthread_rwlock_unlock(&event_list->rwl);
+
+  if (event == NULL) {
+    fprintf(stderr, "Event not found\n");
+    return NULL;
+  }
+
+  if (pthread_mutex_lock(&event->mutex) != 0) {
+    fprintf(stderr, "Error locking mutex\n");
+    return NULL;
+  }
+
+  int* seats = malloc(sizeof(int) * event->rows * event->cols);
+
+  for (size_t i = 1; i <= event->rows; i++) {
+    for (size_t j = 1; j <= event->cols; j++) {
+      seats[seat_index(event, i, j)] = event->data[seat_index(event, i, j)];
+    }
+  }
+
+  pthread_mutex_unlock(&event->mutex);
+  return seats;
 }
 
 //TODO:Change
