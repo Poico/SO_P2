@@ -14,6 +14,8 @@
 #include "eventlist.h"
 #include "operations.h"
 
+#include <errno.h>
+
 int parse_args(int argc, char* argv[]);
 void init_server();
 
@@ -96,6 +98,14 @@ void init_server() {
 }
 
 void accept_client() {
+  // TODO: Error checking on read
+  char opcode;
+  read(registerFIFO, &opcode, sizeof(char));
+  if (opcode != MSG_SETUP)
+  {
+    //TODO: Error
+  }
+
   setup_request request;
   if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
@@ -130,7 +140,7 @@ void handle_client(int req_fd, int resp_fd) {
 
   while (should_work)
   {
-    printf("Process command.\n");
+    printf("Processing command.\n");
     should_work = process_command(req_fd, resp_fd);
   }
 
@@ -200,7 +210,8 @@ int process_command(int req_fd, int resp_fd)
   core_request core;
   if(read(req_fd, &core, sizeof(core_request)) == -1)
   {
-    fprintf(stderr, "Error reading from pipe\n");
+    fprintf(stderr, "Error reading from pipe.\n");
+    fprintf(stderr, "Errno: %d\n", errno);
     exit(1);
   }
   // TODO: Do something with session ID?
