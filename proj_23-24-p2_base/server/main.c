@@ -142,14 +142,16 @@ void accept_client() {
   char opcode;
   if(read(registerFIFO, &opcode, sizeof(char)) == -1)
   {
-    fprintf(stderr, "Error reading from pipe\n");
+    if (errno == 4) //Interrupted system call
+    { return; } //ignore
+    fprintf(stderr, "Error reading from pipe while accepting client: %d.\n", errno);
     exit(1);
   }
   
 
   setup_request request;
   if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
-    fprintf(stderr, "Error reading from pipe\n");
+    fprintf(stderr, "Error reading from pipe while accepting client paths: %d.\n", errno);
     exit(1);
   }
 
