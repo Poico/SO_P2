@@ -55,6 +55,8 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   }
 
   setup_request request;
+  memset(request.request_fifo_name, 0, 40);
+  memset(request.response_fifo_name, 0, 40);
   strncpy(request.request_fifo_name, req_pipe_path, 40);
   strncpy(request.response_fifo_name, resp_pipe_path, 40);
   if (write(server_fd, &request, sizeof(setup_request)) == -1) {

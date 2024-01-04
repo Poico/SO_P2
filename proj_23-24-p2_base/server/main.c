@@ -113,6 +113,11 @@ void handle_client(int req_fd, int resp_fd) {
   //sigaddset(&sigset, SIGUSR1);
   //pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
+  //TODO: Set actual session id
+  setup_response resp = { .session_id = 0 };
+  //TODO: Error checking
+  write(resp_fd, &resp, sizeof(setup_response));
+
   int should_work = 1;
 
   while (should_work)
