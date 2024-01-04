@@ -16,7 +16,7 @@
 int parse_args(int argc, char* argv[]);
 void init_server();
 
-void handle_client();
+void handle_client(int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
 
@@ -78,33 +78,41 @@ void init_server() {
 
 void accept_client() {
   // TODO: Accept client's pipes (read from main pipe)
-  request request;
-  if (read(registerFIFO, &request, sizeof(request)) == -1) {
+  setup_request request;
+  if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
-  request.session_id = 1;
+
+  int req_fd, resp_fd;
+  //TODO: Error checking on opens
+  req_fd = open(request.request_fifo_name, O_RDONLY);
+  resp_fd = open(request.response_fifo_name, O_WRONLY);
 
   // TODO: Pass to client handler thread (it will take care of the rest)
-  handle_client();
-
-  // TODO: Write new client to the producer-consumer buffer
+  handle_client(req_fd, resp_fd);
 }
 
 // Each worker thread enters this function once for each client
-void handle_client() {
+void handle_client(int req_fd, int resp_fd) {
+  //Move signal code to thread init
   sigset_t sigset;
   sigemptyset(&sigset);
   sigaddset(&sigset, SIGUSR1);
   pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-  // TODO: Open pipes provided by client
 
-  // TODO: Work loop
-  // TODO: Read request
-  // TODO: Process request
-  // TODO: Give response to client
-  // TODO: Close pipes
-  if (close(client_pipe) == -1) {
+  int should_work = 1;
+
+  while (should_work)
+  {
+    should_work = process_command(req_fd, resp_fd);
+  }
+
+  if (close(req_fd) == -1) {
+    fprintf(stderr, "Error closing client pipe\n");
+    exit(1);
+  }
+  if (close(resp_fd) == -1) {
     fprintf(stderr, "Error closing client pipe\n");
     exit(1);
   }
@@ -139,4 +147,106 @@ void handle_SIGUSR1(int signum) {
     ems_show(1,events[i].event);
     pthread_mutex_unlock(&events[i].mutex);
   }
+}
+
+//Return o for end of processing/error
+int process_command(int req_fd, int resp_fd)
+{
+  // TODO: Error checking
+  // TODO: Read request
+  core_request core;
+  read(req_fd, &core, sizeof(core_request));
+  // TODO: Do something with session ID?
+
+  // TODO: Maybe break down into more functions
+  switch (core.opcode)
+  {
+    case MSG_QUIT:
+      return 0;
+
+    case MSG_CREATE:
+      handle_create(req_fd, resp_fd);
+      break;
+
+    case MSG_RESERVE:
+      handle_reserve(req_fd, resp_fd);
+      break;
+
+    case MSG_SHOW:
+      handle_show(req_fd, resp_fd);
+      break;
+    
+    case MSG_LIST:
+      break;
+
+    case MSG_SETUP:
+    default:
+      // TODO: Error message?
+      return 0;
+  }
+
+  // TODO: Process request
+  // TODO: Give response to client
+
+  return 1;
+}
+
+void handle_create(int req_fd, int resp_fd)
+{
+  // TODO: Error checking
+  create_request req;
+  read(req_fd, &req, sizeof(create_request));
+
+  int ret = ems_create(req.event_id, req.num_rows, req.num_cols);
+
+  create_response resp = { .return_code = ret };
+  write(resp_fd, &resp, sizeof(create_response));
+}
+
+void handle_reserve(int req_fd, int resp_fd)
+{
+  // TODO: Error checking
+  reserve_request req;
+  read(req_fd, &req, sizeof(reserve_request));
+
+  size_t *xs = malloc(req.num_seats * sizeof(size_t));
+  size_t *ys = malloc(req.num_seats * sizeof(size_t));
+
+  read(req_fd, xs, req.num_seats * sizeof(size_t));
+  read(req_fd, ys, req.num_seats * sizeof(size_t));
+
+  int ret = ems_reserve(req.event_id, req.num_seats, xs, ys);
+
+  reserve_response resp = { .return_code = ret };
+  write(resp_fd, &resp, sizeof(reserve_response));
+}
+
+void handle_show(int req_fd, int resp_fd)
+{
+  // TODO: Error checking
+  show_request req;
+  read(req_fd, &req, sizeof(show_request));
+
+  // TODO: Process show
+
+  show_response resp;
+  resp.num_cols = ;
+  resp.num_rows = ;
+  resp.return_code = ;
+  write(resp_fd, &resp, sizeof(show_response));
+  //TODO: Write data
+}
+
+void handle_list(int req_fd, int resp_fd)
+{
+  // TODO: Error checking
+  //No need to read request, has no extra data
+
+  //TODO: Process list
+
+  list_response resp;
+  resp.num_events = ;
+  resp.return_code = ;
+  write(resp_fd, &resp, sizeof(list_response));
+  //TODO: Write data
 }
