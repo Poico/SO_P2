@@ -39,19 +39,23 @@ int main(int argc, char* argv[]) {
   if (ret) return ret;
   signal(SIGUSR1, handle_SIGUSR1);
 
+  printf("Init EMS.\n");
   // Initialize EMS
   if (ems_init(state_access_delay_us)) {
     fprintf(stderr, "Failed to initialize EMS\n");
     return 1;
   }
 
+  printf("Init server.\n");
   init_server();
 
+  printf("Work loop.\n");
   // TODO: Exit loop condition
   while (!server_should_quit) {
     accept_client();
   }
   
+  printf("Close server.\n");
   close_server();
 }
 
@@ -81,6 +85,7 @@ int parse_args(int argc, char* argv[]) {
 }
 
 void init_server() {
+  unlink(FIFO_path);
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
 
@@ -99,9 +104,11 @@ void accept_client() {
 
   int req_fd, resp_fd;
   //TODO: Error checking on opens
+  printf("Opening pipes.\n");
   req_fd = open(request.request_fifo_name, O_RDONLY);
   resp_fd = open(request.response_fifo_name, O_WRONLY);
 
+  printf("Handle client.\n");
   handle_client(req_fd, resp_fd);
 }
 
@@ -116,15 +123,18 @@ void handle_client(int req_fd, int resp_fd) {
   //TODO: Set actual session id
   setup_response resp = { .session_id = 0 };
   //TODO: Error checking
+  printf("Sending first response.\n");
   write(resp_fd, &resp, sizeof(setup_response));
 
   int should_work = 1;
 
   while (should_work)
   {
+    printf("Process command.\n");
     should_work = process_command(req_fd, resp_fd);
   }
 
+  printf("Done with client.\n");
   if (close(req_fd) == -1) {
     fprintf(stderr, "Error closing client pipe\n");
     exit(1);
@@ -134,6 +144,7 @@ void handle_client(int req_fd, int resp_fd) {
     exit(1);
   }
 
+  printf("Going to sleep.\n");
   // TODO (Once threaded): Return to "waiting for client" mode
 }
 

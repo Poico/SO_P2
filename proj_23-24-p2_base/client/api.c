@@ -14,46 +14,30 @@ static int session_id;
 #define SEND_CORE(op) do { core_request core = { .opcode = op, .session_id = session_id }; if (write(req_fd, &core, sizeof(core_request)) == -1) { return 1; }} while(0)
 
 int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path) {
+  unlink(req_pipe_path);
+  unlink(resp_pipe_path);
+  
+  printf("Creating pipes.\n");
   if (mkfifo(req_pipe_path, 0666) == -1) {
     return 1;
   }
-
   if (mkfifo(resp_pipe_path, 0666) == -1) {
     return 1;
   }
-
-  if(access(req_pipe_path, F_OK) == -1) {
-    return 1;
-  }
-
-  req_fd = open(req_pipe_path, O_WRONLY);
-  if (req_fd == -1) {
-    return 1;
-  }
-
-  if(access(resp_pipe_path, F_OK) == -1) {
-    return 1;
-  }
-  resp_fd = open(resp_pipe_path, O_RDONLY);
   
-  if (resp_fd == -1) {
-    return 1;
-  }
-
-  if(access(server_pipe_path, F_OK) == -1) {
-    return 1;
-  }
-
+  printf("Opening server pipe.\n");
   int server_fd = open(server_pipe_path, O_WRONLY);
   if (server_fd == -1) {
     return 1;
   }
 
+  printf("Sending setup opcode\n");
   char opcode = MSG_SETUP;
   if (write(server_fd, &opcode, sizeof(char)) == -1) {
     return 1;
   }
 
+  printf("Sending setup data\n");
   setup_request request;
   memset(request.request_fifo_name, 0, 40);
   memset(request.response_fifo_name, 0, 40);
@@ -62,7 +46,18 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   if (write(server_fd, &request, sizeof(setup_request)) == -1) {
     return 1;
   }
-  
+
+  printf("Opening client pipes.\n");
+  req_fd = open(req_pipe_path, O_WRONLY);
+  if (req_fd == -1) {
+    return 1;
+  }
+  resp_fd = open(resp_pipe_path, O_RDONLY);
+  if (resp_fd == -1) {
+    return 1;
+  }
+
+  printf("Reading response.\n");
   setup_response response;
   if (read(resp_fd, &response, sizeof(setup_response)) == -1) {
     return 1;
