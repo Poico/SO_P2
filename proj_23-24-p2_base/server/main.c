@@ -34,6 +34,7 @@ void handle_create(int req_fd, int resp_fd);
 void handle_reserve(int req_fd, int resp_fd);
 void handle_show(int req_fd, int resp_fd);
 void handle_list(int req_fd, int resp_fd);
+void *worker_thread_main(void *arg);
 
 unsigned int state_access_delay_us;
 int registerFIFO;
@@ -130,6 +131,7 @@ void accept_client() {
 
 void *worker_thread_main(void *arg)
 {
+  (void)arg;
   while (1) {
     sem_wait(&full);  // decrement full count
     setup_request request = buffer[out];
