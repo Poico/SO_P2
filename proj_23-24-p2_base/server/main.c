@@ -106,6 +106,9 @@ void init_server() {
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
 
+  sem_init(&empty, 0, BUFFER_SIZE);
+  sem_init(&full, 0, 0);
+
   for (int i = 0; i < MAX_SESSION_COUNT; i++) {
     pthread_create(&worker_threads[i], NULL, worker_thread_main, NULL);
   }
@@ -123,18 +126,26 @@ void accept_client() {
     exit(1);
   }
 
+  printf("Producer is producing...\n");
   sem_wait(&empty);  // decrement empty count
   buffer[in] = request;
   in = (in + 1) % BUFFER_SIZE;
   sem_post(&full);  // increment count of full slots
+  printf("Producer produced.\n");
 }
 
 void *worker_thread_main(void *arg)
 {
+  printf("Thread start.\n");
   (void)arg;
   while (1) {
     sem_wait(&full);  // decrement full count
     setup_request request = buffer[out];
+
+    printf("Consumer is consuming...\n");
+    out = (out + 1) % BUFFER_SIZE;
+    sem_post(&empty);  // increment count of empty slots
+    printf("Consumer consumed.\n");
 
     int req_fd, resp_fd;
     //TODO: Error checking on opens
@@ -142,9 +153,6 @@ void *worker_thread_main(void *arg)
     resp_fd = open(request.response_fifo_name, O_WRONLY);
 
     handle_client(req_fd, resp_fd);
-
-    out = (out + 1) % BUFFER_SIZE;
-    sem_post(&empty);  // increment count of empty slots
   }
 }
 

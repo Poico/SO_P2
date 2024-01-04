@@ -27,7 +27,7 @@ run_sv: server/ems
 	@./server/ems main
 
 run_cli: client/client
-	@.client/client req resp main jobs/test.jobs
+	@./client/client req resp main jobs/test.jobs
 
 clean:
 	rm -f common/*.o client/*.o server/*.o server/ems client/client
