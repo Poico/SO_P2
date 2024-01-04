@@ -328,8 +328,11 @@ void handle_show(int req_fd, int resp_fd) {
     exit(1);
   }
 
-  // TODO: Error checking
-  write(resp_fd, data, sizeof(unsigned int) * rows * cols);
+  if(write(resp_fd, data, sizeof(unsigned int) * rows * cols) == -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
 }
 
 void handle_list(int req_fd, int resp_fd) {
@@ -347,6 +350,9 @@ void handle_list(int req_fd, int resp_fd) {
     exit(1);
   }
 
-  // TODO: Error checking
-  write(resp_fd, data, sizeof(unsigned int) * event_count);
+  if(write(resp_fd, &event_count, sizeof(size_t)) == -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
 }
