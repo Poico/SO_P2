@@ -161,9 +161,9 @@ void close_server_threads() {
   // For example, you can use pthread_cancel() to cancel the threads
 
   // Assuming you have an array of pthread_t for the server threads
-  for (int i = 0; i < NUM_SERVER_THREADS; i++) {
-    pthread_cancel(server_threads[i]);
-  }
+  //for (int i = 0; i < NUM_SERVER_THREADS; i++) {
+  //  pthread_cancel(server_threads[i]);
+  //}
 }
 
 //Return o for end of processing/error
