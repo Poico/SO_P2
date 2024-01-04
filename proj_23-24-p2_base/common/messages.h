@@ -15,7 +15,7 @@ enum MSG_OPCODE
 
 typedef struct {
 	char opcode;
-	int session_id;
+	unsigned int session_id;
 } __attribute__((packed)) core_request;
 
 typedef struct {
@@ -24,7 +24,7 @@ typedef struct {
 } __attribute__((packed)) setup_request;
 
 typedef struct {
-	int session_id;
+	unsigned int session_id;
 } __attribute__((packed)) setup_response;
 
 //NOT NEEDED: quit_request

@@ -7,17 +7,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <semaphore.h>
 
 #include "common/constants.h"
 #include "common/io.h"
 #include "common/messages.h"
 #include "eventlist.h"
 #include "operations.h"
-#include <stdio.h>
-#include <pthread.h>
-#include <semaphore.h>
-
-#include <errno.h>
 
 #define BUFFER_SIZE 4
 
@@ -25,7 +21,7 @@ int parse_args(int argc, char* argv[]);
 void init_server();
 
 void accept_client();
-void handle_client(int req_fd, int resp_fd);
+void handle_client(unsigned int session_id, int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
 void close_server_threads();
@@ -42,6 +38,7 @@ char* FIFO_path;
 volatile char server_should_quit;
 
 pthread_t worker_threads[MAX_SESSION_COUNT];
+unsigned int thread_args[MAX_SESSION_COUNT];
 
 // Buffer to hold client requests
 setup_request buffer[BUFFER_SIZE];
@@ -110,7 +107,8 @@ void init_server() {
   sem_init(&full, 0, 0);
 
   for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-    pthread_create(&worker_threads[i], NULL, worker_thread_main, NULL);
+    thread_args[i] = (unsigned int)i;
+    pthread_create(&worker_threads[i], NULL, worker_thread_main, &thread_args[i]);
   }
   server_should_quit = 0;
 }
@@ -137,7 +135,13 @@ void accept_client() {
 void *worker_thread_main(void *arg)
 {
   printf("Thread start.\n");
-  (void)arg;
+  unsigned int session_id = *((unsigned int*)arg);
+
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGUSR1);
+  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
   while (1) {
     sem_wait(&full);  // decrement full count
     setup_request request = buffer[out];
@@ -152,20 +156,14 @@ void *worker_thread_main(void *arg)
     req_fd = open(request.request_fifo_name, O_RDONLY);
     resp_fd = open(request.response_fifo_name, O_WRONLY);
 
-    handle_client(req_fd, resp_fd);
+    handle_client(session_id, req_fd, resp_fd);
   }
 }
 
 // Each worker thread enters this function once for each client
-void handle_client(int req_fd, int resp_fd) {
-  // Move signal code to thread init
-  // sigset_t sigset;
-  // sigemptyset(&sigset);
-  // sigaddset(&sigset, SIGUSR1);
-  // pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
+void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
   //TODO: Set actual session id
-  setup_response resp = { .session_id = 0 };
+  setup_response resp = { .session_id = session_id };
   //TODO: Error checking
   write(resp_fd, &resp, sizeof(setup_response));
 

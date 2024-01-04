@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 static int req_fd, resp_fd;
-static int session_id;
+static unsigned session_id;
 
 #define SEND_CORE(op) do { core_request core = { .opcode = op, .session_id = session_id }; if (write(req_fd, &core, sizeof(core_request)) == -1) { return 1; }} while(0)
 
