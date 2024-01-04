@@ -41,7 +41,7 @@ int ems_list_events(int out_fd);
 /// @param event_id Id of the event to return.
 /// @param length length of the array
 /// @return array of events
-int* ems_show_to_client(unsigned int event_id,size_t* length);
+int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_cols);
 
 /// Returns all the events in array.
 /// @param length length of the array

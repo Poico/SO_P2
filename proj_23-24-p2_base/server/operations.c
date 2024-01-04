@@ -178,7 +178,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-//TODO: change 
 int ems_show(int out_fd, unsigned int event_id) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -236,7 +235,7 @@ int ems_show(int out_fd, unsigned int event_id) {
 }
 
 
-int* ems_show_to_client(unsigned int event_id,size_t* length){
+int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_cols){
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return NULL;
@@ -268,12 +267,14 @@ int* ems_show_to_client(unsigned int event_id,size_t* length){
       seats[seat_index(event, i, j)] = event->data[seat_index(event, i, j)];
     }
   }
-  *length=event->rows * event->cols;
+
+  *num_rows = event->rows;
+  *num_cols = event->cols;
+
   pthread_mutex_unlock(&event->mutex);
   return seats;
 }
 
-//TODO:Change
 int ems_list_events(int out_fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");

@@ -276,35 +276,40 @@ void handle_show(int req_fd, int resp_fd)
     exit(1);
   }
 
-  // TODO: Process show
-  
-  //Mandar uma lista para o pipe
+  size_t rows = 0, cols = 0;
+  int *data = ems_show_to_client(req.event_id, &rows, &cols);
 
   show_response resp;
-  resp.num_cols = ;
-  resp.num_rows = ;
-  resp.return_code = ;
+  resp.num_cols = cols;
+  resp.num_rows = rows;
+  resp.return_code = data == NULL ? 1 : 0;
+
   if(write(resp_fd, &resp, sizeof(show_response)) == -1)
   {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
-  //TODO: Write data
+  
+  //TODO: Error checking
+  write(resp_fd, data, sizeof(int) * rows * cols);
 }
 
 void handle_list(int req_fd, int resp_fd)
 {
   //No need to read request, has no extra data
 
-  //TODO: Process list
+  size_t event_count = 0;
+  int *data = ems_list_events_to_client(&event_count);
 
   list_response resp;
-  resp.num_events = ;
-  resp.return_code = ;
+  resp.num_events = event_count;
+  resp.return_code = data == NULL ? 1 : 0;
   if(write(resp_fd, &resp, sizeof(list_response)) == -1)
   {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
-  //TODO: Write data
+
+  //TODO: Error checking
+  write(resp_fd, data, sizeof(int) * event_count);
 }
