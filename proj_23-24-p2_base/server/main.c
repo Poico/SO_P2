@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "common/constants.h"
 #include "common/io.h"
@@ -16,10 +17,12 @@
 int parse_args(int argc, char* argv[]);
 void init_server();
 
+void accept_client();
 void handle_client(int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
 void close_server_threads();
+int process_command(int req_fd, int resp_fd);
 
 unsigned int state_access_delay_us;
 int registerFIFO;
@@ -44,7 +47,7 @@ int main(int argc, char* argv[]) {
   while (!server_should_quit) {
     accept_client();
   }
-
+  
   close_server();
 }
 
@@ -75,9 +78,9 @@ void init_server() {
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
 
-  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-    pthread_create(&worker_threads[i], NULL, handle_client, NULL);
-  }
+  //for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+  //  pthread_create(&worker_threads[i], NULL, handle_client, NULL);
+  //}
   server_should_quit = 0;
 }
 
@@ -99,10 +102,10 @@ void accept_client() {
 // Each worker thread enters this function once for each client
 void handle_client(int req_fd, int resp_fd) {
   //Move signal code to thread init
-  sigset_t sigset;
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGUSR1);
-  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+  //sigset_t sigset;
+  //sigemptyset(&sigset);
+  //sigaddset(&sigset, SIGUSR1);
+  //pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
   int should_work = 1;
 
@@ -138,7 +141,10 @@ void close_server() {
 }
 
 void handle_SIGUSR1(int signum) {
-  struct EventList* event_list = NULL;
+  (void)signum;
+  //TODO: Rewrite to only set a flag and do the printing in main
+
+  /*struct EventList* event_list = NULL;
   event_list = get_event_list();
 
   if (event_list == NULL) {
@@ -153,7 +159,7 @@ void handle_SIGUSR1(int signum) {
     ems_show(1,node->event->id);
     pthread_mutex_unlock(&node->event->mutex);
     node = node->next;
-  }
+  }*/
 }
 
 void close_server_threads() {
@@ -268,7 +274,7 @@ void handle_show(int req_fd, int resp_fd)
   }
 
   size_t rows = 0, cols = 0;
-  int *data = ems_show_to_client(req.event_id, &rows, &cols);
+  unsigned int *data = ems_show_to_client(req.event_id, &rows, &cols);
 
   show_response resp;
   resp.num_cols = cols;
@@ -282,7 +288,7 @@ void handle_show(int req_fd, int resp_fd)
   }
   
   //TODO: Error checking
-  write(resp_fd, data, sizeof(int) * rows * cols);
+  write(resp_fd, data, sizeof(unsigned int) * rows * cols);
 }
 
 void handle_list(int req_fd, int resp_fd)
@@ -290,7 +296,7 @@ void handle_list(int req_fd, int resp_fd)
   //No need to read request, has no extra data
 
   size_t event_count = 0;
-  int *data = ems_list_events_to_client(&event_count);
+  unsigned int *data = ems_list_events_to_client(&event_count);
 
   list_response resp;
   resp.num_events = event_count;
@@ -302,5 +308,5 @@ void handle_list(int req_fd, int resp_fd)
   }
 
   //TODO: Error checking
-  write(resp_fd, data, sizeof(int) * event_count);
+  write(resp_fd, data, sizeof(unsigned int) * event_count);
 }

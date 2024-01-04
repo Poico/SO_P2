@@ -235,7 +235,7 @@ int ems_show(int out_fd, unsigned int event_id) {
 }
 
 
-int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_cols){
+unsigned int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_cols){
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return NULL;
@@ -260,7 +260,7 @@ int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_col
     return NULL;
   }
 
-  int* seats = malloc(sizeof(int) * event->rows * event->cols);
+  unsigned int* seats = malloc(sizeof(unsigned int) * event->rows * event->cols);
 
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
@@ -329,7 +329,7 @@ int ems_list_events(int out_fd) {
 }
 
 
-int* ems_list_events_to_client(size_t* length){
+unsigned int* ems_list_events_to_client(size_t* length){
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return NULL;
@@ -349,7 +349,7 @@ int* ems_list_events_to_client(size_t* length){
     return NULL;
   }
 
-  int* events = malloc(sizeof(int) * event_list->size);
+  unsigned int* events = malloc(sizeof(unsigned int) * (size_t)event_list->size);
 
   int i=0;
   while (1) {
@@ -361,7 +361,7 @@ int* ems_list_events_to_client(size_t* length){
 
     current = current->next;
   }
-  *length=event_list->size*sizeof(int);
+  *length=(size_t)event_list->size * sizeof(unsigned int);
   pthread_rwlock_unlock(&event_list->rwl);
   return events;
 }

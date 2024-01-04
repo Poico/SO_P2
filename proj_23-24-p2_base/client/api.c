@@ -1,6 +1,6 @@
 #include "api.h"
 
-#include <../common/messages.h>
+#include <common/messages.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
