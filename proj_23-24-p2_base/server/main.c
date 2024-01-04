@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <semaphore.h>
+#include <string.h>
 
 #include "common/constants.h"
 #include "common/io.h"
@@ -72,8 +73,20 @@ int main(int argc, char* argv[]) {
 
     if (show_flag)
     {
-      //TODO: Print
       show_flag = 0;
+
+      size_t count;
+      unsigned int *data = ems_list_events_to_client(&count);
+
+      if (data == NULL) continue;
+
+      for (size_t i = 0; i < count; i++)
+      {
+        char buff[32];
+        snprintf(buff, 32, "Event %d:\n", data[i]);
+        write(1, buff, strlen(buff));
+        ems_show(1, data[i]);
+      }
     }
   }
   
@@ -315,7 +328,7 @@ void handle_reserve(int req_fd, int resp_fd) {
 
   free(xs);
   free(ys);
-  
+
   reserve_response resp = {.return_code = ret};
   if (write(resp_fd, &resp, sizeof(reserve_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
