@@ -23,11 +23,17 @@ client/client: common/io.o client/main.c client/api.o client/parser.o
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c ${@:.o=.c} -o $@
 
-run: server/ems
-	@./server/ems
+run_sv: server/ems
+	@./server/ems main
+
+run_cli: client/client
+	@.client/client req resp main jobs/test.jobs
 
 clean:
 	rm -f common/*.o client/*.o server/*.o server/ems client/client
+	-@unlink req
+	-@unlinq resp
+	-@unlink main
 
 format:
 	@which clang-format >/dev/null 2>&1 || echo "Please install clang-format to run this command"
