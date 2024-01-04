@@ -10,8 +10,8 @@
 #include "common/constants.h"
 #include "common/io.h"
 #include "common/messages.h"
-#include "operations.h"
 #include "eventlist.h"
+#include "operations.h"
 
 int parse_args(int argc, char* argv[]);
 void init_server();
@@ -25,6 +25,7 @@ unsigned int state_access_delay_us;
 int registerFIFO;
 char* FIFO_path;
 volatile char server_should_quit;
+pthread_t worker_threads[MAX_SESSION_COUNT];
 
 int main(int argc, char* argv[]) {
   int ret = parse_args(argc, argv);
@@ -73,7 +74,10 @@ int parse_args(int argc, char* argv[]) {
 void init_server() {
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
-  // LATER: TODO: Initialize worker threads
+
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    pthread_create(&worker_threads[i], NULL, handle_client, NULL);
+  }
   server_should_quit = 0;
 }
 
