@@ -1,5 +1,5 @@
-client/client
-server/ems
+proj_23-24-p2_base/client/client
+proj_23-24-p2_base/server/ems
 *.o
 *.out
 .vscode

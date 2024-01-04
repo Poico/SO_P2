@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "common/constants.h"
 #include "common/io.h"
@@ -23,6 +24,10 @@ void close_server();
 void handle_SIGUSR1(int signum);
 void close_server_threads();
 int process_command(int req_fd, int resp_fd);
+void handle_create(int req_fd, int resp_fd);
+void handle_reserve(int req_fd, int resp_fd);
+void handle_show(int req_fd, int resp_fd);
+void handle_list(int req_fd, int resp_fd);
 
 unsigned int state_access_delay_us;
 int registerFIFO;
@@ -72,6 +77,8 @@ int parse_args(int argc, char* argv[]) {
   if (argc >= 2) {
     FIFO_path = argv[1];
   }
+
+  return 0;
 }
 
 void init_server() {
@@ -294,6 +301,7 @@ void handle_show(int req_fd, int resp_fd)
 void handle_list(int req_fd, int resp_fd)
 {
   //No need to read request, has no extra data
+  (void)req_fd;
 
   size_t event_count = 0;
   unsigned int *data = ems_list_events_to_client(&event_count);
