@@ -1,4 +1,3 @@
-#include <asm/signal.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
