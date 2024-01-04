@@ -48,9 +48,12 @@ int out = 0;
 sem_t empty;  // semaphore to track empty slots in buffer
 sem_t full;   // semaphore to track filled slots in buffer
 
+volatile char show_flag = 0; //no need for thread safety, not important
+
 int main(int argc, char* argv[]) {
   int ret = parse_args(argc, argv);
   if (ret) return ret;
+
   signal(SIGUSR1, handle_SIGUSR1);
 
   printf("Init EMS.\n");
@@ -64,9 +67,14 @@ int main(int argc, char* argv[]) {
   init_server();
 
   printf("Work loop.\n");
-  // TODO: Exit loop condition
   while (!server_should_quit) {
     accept_client();
+
+    if (show_flag)
+    {
+      //TODO: Print
+      show_flag = 0;
+    }
   }
   
   printf("Close server.\n");
@@ -162,7 +170,6 @@ void *worker_thread_main(void *arg)
 
 // Each worker thread enters this function once for each client
 void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
-  //TODO: Set actual session id
   setup_response resp = { .session_id = session_id };
   //TODO: Error checking
   write(resp_fd, &resp, sizeof(setup_response));
@@ -185,7 +192,6 @@ void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
   }
 
   printf("Going to sleep.\n");
-  // TODO (Once threaded): Return to "waiting for client" mode
 }
 
 void close_server() {
@@ -204,7 +210,7 @@ void close_server() {
 
 void handle_SIGUSR1(int signum) {
   (void)signum;
-  // TODO: Rewrite to only set a flag and do the printing in main
+  show_flag = 1;
 
   /*struct EventList* event_list = NULL;
   event_list = get_event_list();
@@ -234,7 +240,6 @@ void close_server_threads() {
   //}
 }
 
-// Return o for end of processing/error
 int process_command(int req_fd, int resp_fd) {
   core_request core;
   if(read(req_fd, &core, sizeof(core_request)) == -1)
@@ -242,7 +247,6 @@ int process_command(int req_fd, int resp_fd) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
-  // TODO: Do something with session ID?
 
   switch (core.opcode) {
     case MSG_QUIT:
@@ -309,6 +313,9 @@ void handle_reserve(int req_fd, int resp_fd) {
 
   int ret = ems_reserve(req.event_id, req.num_seats, xs, ys);
 
+  free(xs);
+  free(ys);
+  
   reserve_response resp = {.return_code = ret};
   if (write(resp_fd, &resp, sizeof(reserve_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
@@ -358,9 +365,11 @@ void handle_list(int req_fd, int resp_fd) {
     exit(1);
   }
 
-  if(write(resp_fd, &event_count, sizeof(size_t)) == -1)
+  if(write(resp_fd, data, event_count * sizeof(unsigned int)) == -1)
   {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
+
+  free(data);
 }
