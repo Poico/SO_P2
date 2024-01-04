@@ -16,6 +16,8 @@
 #include "eventlist.h"
 #include "operations.h"
 
+#include <errno.h>
+
 #define BUFFER_SIZE 4
 
 int parse_args(int argc, char* argv[]);
@@ -172,6 +174,8 @@ void *worker_thread_main(void *arg)
     sem_post(&empty);  // increment count of empty slots
     printf("Consumer consumed.\n");
 
+    printf("Received paths '%s' and '%s'.\n", request.request_fifo_name, request.response_fifo_name);
+
     int req_fd, resp_fd;
     //TODO: Error checking on opens
     req_fd = open(request.request_fifo_name, O_RDONLY);
@@ -195,6 +199,7 @@ void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
   }
 
   printf("Done with client.\n");
+
   if (close(req_fd) == -1) {
     fprintf(stderr, "Error closing client pipe\n");
     exit(1);
@@ -225,22 +230,9 @@ void handle_SIGUSR1(int signum) {
   (void)signum;
   show_flag = 1;
 
-  /*struct EventList* event_list = NULL;
-  event_list = get_event_list();
+  printf("USR1\n");
 
-  if (event_list == NULL) {
-    fprintf(stderr, "Error getting event list\n");
-    return;
-  }
-
-  // Loop through all events to memorize their information
-  struct ListNode* node = event_list->head;
-  while (node != NULL) {
-    pthread_mutex_lock(&node->event->mutex);
-    ems_show(1,node->event->id); //TODO: fix this based on
-    pthread_mutex_unlock(&node->event->mutex);
-    node = node->next;
-  }*/
+  signal(SIGUSR1, handle_SIGUSR1);
 }
 
 void close_server_threads() {
@@ -257,7 +249,7 @@ int process_command(int req_fd, int resp_fd) {
   core_request core;
   if(read(req_fd, &core, sizeof(core_request)) == -1)
   {
-    fprintf(stderr, "Error reading from pipe\n");
+    fprintf(stderr, "Error reading from pipe while reading core: %d.\n", errno);
     exit(1);
   }
 
