@@ -19,6 +19,8 @@
 
 #include <errno.h>
 
+#define BUFFER_SIZE 4
+
 int parse_args(int argc, char* argv[]);
 void init_server();
 
@@ -41,7 +43,7 @@ volatile char server_should_quit;
 pthread_t worker_threads[MAX_SESSION_COUNT];
 
 // Buffer to hold client requests
-client_request buffer[BUFFER_SIZE];
+setup_request buffer[BUFFER_SIZE];
 int in = 0;
 int out = 0;
 
@@ -103,9 +105,9 @@ void init_server() {
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
 
-  // for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-  //   pthread_create(&worker_threads[i], NULL, handle_client, NULL);
-  // }
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    pthread_create(&worker_threads[i], NULL, worker_thread_main, NULL);
+  }
   server_should_quit = 0;
 }
 
@@ -113,10 +115,6 @@ void accept_client() {
   // TODO: Error checking on read
   char opcode;
   read(registerFIFO, &opcode, sizeof(char));
-  if (opcode != MSG_SETUP)
-  {
-    //TODO: Error
-  }
 
   setup_request request;
   if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
@@ -124,32 +122,25 @@ void accept_client() {
     exit(1);
   }
 
-  int req_fd, resp_fd;
-  //TODO: Error checking on opens
-  req_fd = open(request.request_fifo_name, O_RDONLY);
-  resp_fd = open(request.response_fifo_name, O_WRONLY);
-
-  printf("Handle client.\n");
-  handle_client(req_fd, resp_fd);
+  sem_wait(&empty);  // decrement empty count
+  buffer[in] = request;
+  in = (in + 1) % BUFFER_SIZE;
+  sem_post(&full);  // increment count of full slots
 }
 
-void* producer(void* arg) {
-  int req_fd = *(int*)arg;
-  client_request request;
-  while (read(req_fd, &request, sizeof(client_request)) != -1) {
-    sem_wait(&empty);  // decrement empty count
-    buffer[in] = request;
-    in = (in + 1) % BUFFER_SIZE;
-    sem_post(&full);  // increment count of full slots
-  }
-}
-
-void* consumer(void* arg) {
-  int resp_fd = *(int*)arg;
+void *worker_thread_main(void *arg)
+{
   while (1) {
     sem_wait(&full);  // decrement full count
-    client_request request = buffer[out];
-    process_request(request, resp_fd);
+    setup_request request = buffer[out];
+
+    int req_fd, resp_fd;
+    //TODO: Error checking on opens
+    req_fd = open(request.request_fifo_name, O_RDONLY);
+    resp_fd = open(request.response_fifo_name, O_WRONLY);
+
+    handle_client(req_fd, resp_fd);
+
     out = (out + 1) % BUFFER_SIZE;
     sem_post(&empty);  // increment count of empty slots
   }
