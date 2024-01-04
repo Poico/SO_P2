@@ -10,8 +10,8 @@
 #include "common/constants.h"
 #include "common/io.h"
 #include "common/messages.h"
-#include "operations.h"
 #include "eventlist.h"
+#include "operations.h"
 
 int parse_args(int argc, char* argv[]);
 void init_server();
@@ -19,11 +19,13 @@ void init_server();
 void handle_client(int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
+void close_server_threads();
 
 unsigned int state_access_delay_us;
 int registerFIFO;
 char* FIFO_path;
 volatile char server_should_quit;
+pthread_t worker_threads[MAX_SESSION_COUNT];
 
 int main(int argc, char* argv[]) {
   int ret = parse_args(argc, argv);
@@ -72,7 +74,10 @@ int parse_args(int argc, char* argv[]) {
 void init_server() {
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
-  // LATER: TODO: Initialize worker threads
+
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    pthread_create(&worker_threads[i], NULL, handle_client, NULL);
+  }
   server_should_quit = 0;
 }
 
@@ -129,23 +134,38 @@ void close_server() {
     fprintf(stderr, "Error closing register FIFO\n");
     exit(1);
   }
-  // LATER: TODO: Close server threads
+  close_server_threads();
   ems_terminate();
   exit(0);
 }
 
 void handle_SIGUSR1(int signum) {
-  //TODO: Remover
-  int NUM_EVENTS = 0;
-  EventList* events = ems_get_events(&NUM_EVENTS);
-  //TODO: Remover
+  struct EventList* event_list = NULL;
+  event_list = get_event_list();
 
+  if (event_list == NULL) {
+    fprintf(stderr, "Error getting event list\n");
+    return;
+  }
 
   // Loop through all events to memorize their information
-  for (int i = 0; i < NUM_EVENTS; ++i) {
-    pthread_mutex_lock(&events[i].mutex);
-    ems_show(1,events[i].event);
-    pthread_mutex_unlock(&events[i].mutex);
+  struct ListNode* node = event_list->head;
+  while (node != NULL) {
+    pthread_mutex_lock(&node->event->mutex);
+    ems_show(1, node->event);
+    pthread_mutex_unlock(&node->event->mutex);
+    node = node->next;
+  }
+}
+
+void close_server_threads() {
+  // TODO: Implement closing server threads
+  // Code to close server threads goes here
+  // For example, you can use pthread_cancel() to cancel the threads
+
+  // Assuming you have an array of pthread_t for the server threads
+  for (int i = 0; i < NUM_SERVER_THREADS; i++) {
+    pthread_cancel(server_threads[i]);
   }
 }
 
