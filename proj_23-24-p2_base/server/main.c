@@ -82,7 +82,6 @@ void init_server() {
 }
 
 void accept_client() {
-  // TODO: Accept client's pipes (read from main pipe)
   setup_request request;
   if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
@@ -94,7 +93,6 @@ void accept_client() {
   req_fd = open(request.request_fifo_name, O_RDONLY);
   resp_fd = open(request.response_fifo_name, O_WRONLY);
 
-  // TODO: Pass to client handler thread (it will take care of the rest)
   handle_client(req_fd, resp_fd);
 }
 
@@ -122,7 +120,7 @@ void handle_client(int req_fd, int resp_fd) {
     exit(1);
   }
 
-  // TODO: Return to "waiting for client" mode
+  // TODO (Once threaded): Return to "waiting for client" mode
 }
 
 void close_server() {
@@ -159,7 +157,6 @@ void handle_SIGUSR1(int signum) {
 }
 
 void close_server_threads() {
-  // TODO: Implement closing server threads
   // Code to close server threads goes here
   // For example, you can use pthread_cancel() to cancel the threads
 
@@ -172,8 +169,6 @@ void close_server_threads() {
 //Return o for end of processing/error
 int process_command(int req_fd, int resp_fd)
 {
-  // TODO: Error checking
-  // TODO: Read request
   core_request core;
   if(read(req_fd, &core, sizeof(core_request)) == -1)
   {
@@ -182,7 +177,6 @@ int process_command(int req_fd, int resp_fd)
   }
   // TODO: Do something with session ID?
 
-  // TODO: Maybe break down into more functions
   switch (core.opcode)
   {
     case MSG_QUIT:
@@ -208,9 +202,6 @@ int process_command(int req_fd, int resp_fd)
       fprintf(stderr, "Invalid opcode\n");
       return 0;
   }
-
-  // TODO: Process request
-  // TODO: Give response to client
 
   return 1;
 }
