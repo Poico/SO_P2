@@ -82,6 +82,7 @@ int main(int argc, char* argv[]) {
 
       if (data == NULL) continue;
 
+      write(1, "Listing all events:\n", 20);
       for (size_t i = 0; i < count; i++)
       {
         char buff[32];
@@ -137,9 +138,14 @@ void init_server() {
 }
 
 void accept_client() {
-  // TODO: Error checking on read
+  
   char opcode;
-  read(registerFIFO, &opcode, sizeof(char));
+  if(read(registerFIFO, &opcode, sizeof(char)) == -1)
+  {
+    fprintf(stderr, "Error reading from pipe\n");
+    exit(1);
+  }
+  
 
   setup_request request;
   if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
@@ -164,7 +170,7 @@ void *worker_thread_main(void *arg)
   sigemptyset(&sigset);
   sigaddset(&sigset, SIGUSR1);
   pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
+  
   while (1) {
     sem_wait(&full);  // decrement full count
     setup_request request = buffer[out];
@@ -177,9 +183,17 @@ void *worker_thread_main(void *arg)
     printf("Received paths '%s' and '%s'.\n", request.request_fifo_name, request.response_fifo_name);
 
     int req_fd, resp_fd;
-    //TODO: Error checking on opens
-    req_fd = open(request.request_fifo_name, O_RDONLY);
-    resp_fd = open(request.response_fifo_name, O_WRONLY);
+    
+    if((req_fd = open(request.request_fifo_name, O_RDONLY)) == -1)
+    {
+      fprintf(stderr, "Error opening request pipe\n");
+      exit(1);
+    }
+    if((resp_fd = open(request.response_fifo_name, O_WRONLY)) == -1)
+    {
+      fprintf(stderr, "Error opening response pipe\n");
+      exit(1);
+    }
 
     handle_client(session_id, req_fd, resp_fd);
   }
@@ -188,8 +202,12 @@ void *worker_thread_main(void *arg)
 // Each worker thread enters this function once for each client
 void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
   setup_response resp = { .session_id = session_id };
-  //TODO: Error checking
-  write(resp_fd, &resp, sizeof(setup_response));
+  
+  if(write(resp_fd, &resp, sizeof(setup_response))== -1)
+  {
+    fprintf(stderr, "Error writing to pipe\n");
+    exit(1);
+  }
 
   int should_work = 1;
 
@@ -236,13 +254,9 @@ void handle_SIGUSR1(int signum) {
 }
 
 void close_server_threads() {
-  // Code to close server threads goes here
-  // For example, you can use pthread_cancel() to cancel the threads
-
-  // Assuming you have an array of pthread_t for the server threads
-  // for (int i = 0; i < NUM_SERVER_THREADS; i++) {
-  //  pthread_cancel(server_threads[i]);
-  //}
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    pthread_cancel(worker_threads[i]);
+  }
 }
 
 int process_command(int req_fd, int resp_fd) {
@@ -308,11 +322,15 @@ void handle_reserve(int req_fd, int resp_fd) {
   size_t* ys = malloc(req.num_seats * sizeof(size_t));
   if (read(req_fd, xs, req.num_seats * sizeof(size_t)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
+    free(xs); // If this fails, we need to free xs and ys before exiting
+    free(ys);
     exit(1);
   }
 
   if (read(req_fd, ys, req.num_seats * sizeof(size_t)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
+    free(xs);
+    free(ys);
     exit(1);
   }
 
@@ -337,7 +355,7 @@ void handle_show(int req_fd, int resp_fd) {
 
   size_t rows = 0, cols = 0;
   unsigned int* data = ems_show_to_client(req.event_id, &rows, &cols);
-
+  
   show_response resp;
   resp.num_cols = cols;
   resp.num_rows = rows;
@@ -345,14 +363,18 @@ void handle_show(int req_fd, int resp_fd) {
 
   if (write(resp_fd, &resp, sizeof(show_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
+    free(data);
     exit(1);
   }
 
   if(write(resp_fd, data, sizeof(unsigned int) * rows * cols) == -1)
   {
     fprintf(stderr, "Error writing to pipe\n");
+    free(data);
     exit(1);
   }
+  
+  free(data);
 }
 
 void handle_list(int req_fd, int resp_fd) {
@@ -361,18 +383,20 @@ void handle_list(int req_fd, int resp_fd) {
 
   size_t event_count = 0;
   unsigned int* data = ems_list_events_to_client(&event_count);
-
+  
   list_response resp;
   resp.num_events = event_count;
   resp.return_code = data == NULL ? 1 : 0;
   if (write(resp_fd, &resp, sizeof(list_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
+    free(data);
     exit(1);
   }
 
   if(write(resp_fd, data, event_count * sizeof(unsigned int)) == -1)
   {
     fprintf(stderr, "Error writing to pipe\n");
+    free(data);
     exit(1);
   }
 
