@@ -1,18 +1,21 @@
 #include <fcntl.h>
 #include <limits.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <signal.h>
 
 #include "common/constants.h"
 #include "common/io.h"
 #include "common/messages.h"
 #include "eventlist.h"
 #include "operations.h"
+#include <stdio.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 int parse_args(int argc, char* argv[]);
 void init_server();
@@ -32,7 +35,16 @@ unsigned int state_access_delay_us;
 int registerFIFO;
 char* FIFO_path;
 volatile char server_should_quit;
+
 pthread_t worker_threads[MAX_SESSION_COUNT];
+
+// Buffer to hold client requests
+client_request buffer[BUFFER_SIZE];
+int in = 0;
+int out = 0;
+
+sem_t empty;  // semaphore to track empty slots in buffer
+sem_t full;   // semaphore to track filled slots in buffer
 
 int main(int argc, char* argv[]) {
   int ret = parse_args(argc, argv);
@@ -51,7 +63,7 @@ int main(int argc, char* argv[]) {
   while (!server_should_quit) {
     accept_client();
   }
-  
+
   close_server();
 }
 
@@ -84,9 +96,9 @@ void init_server() {
   mkfifo(FIFO_path, 0666);
   registerFIFO = open(FIFO_path, O_RDWR);
 
-  //for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-  //  pthread_create(&worker_threads[i], NULL, handle_client, NULL);
-  //}
+  // for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+  //   pthread_create(&worker_threads[i], NULL, handle_client, NULL);
+  // }
   server_should_quit = 0;
 }
 
@@ -98,30 +110,51 @@ void accept_client() {
   }
 
   int req_fd, resp_fd;
-  //TODO: Error checking on opens
+  // TODO: Error checking on opens
   req_fd = open(request.request_fifo_name, O_RDONLY);
   resp_fd = open(request.response_fifo_name, O_WRONLY);
 
   handle_client(req_fd, resp_fd);
 }
 
+void* producer(void* arg) {
+  int req_fd = *(int*)arg;
+  client_request request;
+  while (read(req_fd, &request, sizeof(client_request)) != -1) {
+    sem_wait(&empty);  // decrement empty count
+    buffer[in] = request;
+    in = (in + 1) % BUFFER_SIZE;
+    sem_post(&full);  // increment count of full slots
+  }
+}
+
+void* consumer(void* arg) {
+  int resp_fd = *(int*)arg;
+  while (1) {
+    sem_wait(&full);  // decrement full count
+    client_request request = buffer[out];
+    process_request(request, resp_fd);
+    out = (out + 1) % BUFFER_SIZE;
+    sem_post(&empty);  // increment count of empty slots
+  }
+}
+
 // Each worker thread enters this function once for each client
 void handle_client(int req_fd, int resp_fd) {
-  //Move signal code to thread init
-  //sigset_t sigset;
-  //sigemptyset(&sigset);
-  //sigaddset(&sigset, SIGUSR1);
-  //pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+  // Move signal code to thread init
+  // sigset_t sigset;
+  // sigemptyset(&sigset);
+  // sigaddset(&sigset, SIGUSR1);
+  // pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
-  //TODO: Set actual session id
-  setup_response resp = { .session_id = 0 };
-  //TODO: Error checking
+  // TODO: Set actual session id
+  setup_response resp = {.session_id = 0};
+  // TODO: Error checking
   write(resp_fd, &resp, sizeof(setup_response));
 
   int should_work = 1;
 
-  while (should_work)
-  {
+  while (should_work) {
     should_work = process_command(req_fd, resp_fd);
   }
 
@@ -153,7 +186,7 @@ void close_server() {
 
 void handle_SIGUSR1(int signum) {
   (void)signum;
-  //TODO: Rewrite to only set a flag and do the printing in main
+  // TODO: Rewrite to only set a flag and do the printing in main
 
   /*struct EventList* event_list = NULL;
   event_list = get_event_list();
@@ -167,7 +200,7 @@ void handle_SIGUSR1(int signum) {
   struct ListNode* node = event_list->head;
   while (node != NULL) {
     pthread_mutex_lock(&node->event->mutex);
-    ems_show(1,node->event->id);
+    ems_show(1,node->event->id); //TODO: fix this based on
     pthread_mutex_unlock(&node->event->mutex);
     node = node->next;
   }*/
@@ -178,24 +211,21 @@ void close_server_threads() {
   // For example, you can use pthread_cancel() to cancel the threads
 
   // Assuming you have an array of pthread_t for the server threads
-  //for (int i = 0; i < NUM_SERVER_THREADS; i++) {
+  // for (int i = 0; i < NUM_SERVER_THREADS; i++) {
   //  pthread_cancel(server_threads[i]);
   //}
 }
 
-//Return o for end of processing/error
-int process_command(int req_fd, int resp_fd)
-{
+// Return o for end of processing/error
+int process_command(int req_fd, int resp_fd) {
   core_request core;
-  if(read(req_fd, &core, sizeof(core_request)) == -1)
-  {
+  if (read(req_fd, &core, sizeof(core_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
   // TODO: Do something with session ID?
 
-  switch (core.opcode)
-  {
+  switch (core.opcode) {
     case MSG_QUIT:
       return 0;
 
@@ -210,7 +240,7 @@ int process_command(int req_fd, int resp_fd)
     case MSG_SHOW:
       handle_show(req_fd, resp_fd);
       break;
-    
+
     case MSG_LIST:
       break;
 
@@ -223,102 +253,89 @@ int process_command(int req_fd, int resp_fd)
   return 1;
 }
 
-void handle_create(int req_fd, int resp_fd)
-{
+void handle_create(int req_fd, int resp_fd) {
   create_request req;
-  if(read(req_fd, &req, sizeof(create_request)) == -1)
-  {
+  if (read(req_fd, &req, sizeof(create_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
   int ret = ems_create(req.event_id, req.num_rows, req.num_cols);
 
-  create_response resp = { .return_code = ret };
-  if(write(resp_fd, &resp, sizeof(create_response)) == -1)
-  {
+  create_response resp = {.return_code = ret};
+  if (write(resp_fd, &resp, sizeof(create_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
 }
 
-void handle_reserve(int req_fd, int resp_fd)
-{
+void handle_reserve(int req_fd, int resp_fd) {
   reserve_request req;
-  if(read(req_fd, &req, sizeof(reserve_request)) == -1)
-  {
+  if (read(req_fd, &req, sizeof(reserve_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
-  size_t *xs = malloc(req.num_seats * sizeof(size_t));
-  size_t *ys = malloc(req.num_seats * sizeof(size_t));
-  if(read(req_fd, xs, req.num_seats * sizeof(size_t)) == -1)
-  {
+  size_t* xs = malloc(req.num_seats * sizeof(size_t));
+  size_t* ys = malloc(req.num_seats * sizeof(size_t));
+  if (read(req_fd, xs, req.num_seats * sizeof(size_t)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
-  if(read(req_fd, ys, req.num_seats * sizeof(size_t)) == -1)
-  {
+  if (read(req_fd, ys, req.num_seats * sizeof(size_t)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
   int ret = ems_reserve(req.event_id, req.num_seats, xs, ys);
 
-  reserve_response resp = { .return_code = ret };
-  if(write(resp_fd, &resp, sizeof(reserve_response)) == -1)
-  {
+  reserve_response resp = {.return_code = ret};
+  if (write(resp_fd, &resp, sizeof(reserve_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
 }
 
-void handle_show(int req_fd, int resp_fd)
-{
+void handle_show(int req_fd, int resp_fd) {
   show_request req;
-  if(read(req_fd, &req, sizeof(show_request)) == -1)
-  {
+  if (read(req_fd, &req, sizeof(show_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
   size_t rows = 0, cols = 0;
-  unsigned int *data = ems_show_to_client(req.event_id, &rows, &cols);
+  unsigned int* data = ems_show_to_client(req.event_id, &rows, &cols);
 
   show_response resp;
   resp.num_cols = cols;
   resp.num_rows = rows;
   resp.return_code = data == NULL ? 1 : 0;
 
-  if(write(resp_fd, &resp, sizeof(show_response)) == -1)
-  {
+  if (write(resp_fd, &resp, sizeof(show_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
-  
-  //TODO: Error checking
+
+  // TODO: Error checking
   write(resp_fd, data, sizeof(unsigned int) * rows * cols);
 }
 
-void handle_list(int req_fd, int resp_fd)
-{
-  //No need to read request, has no extra data
+void handle_list(int req_fd, int resp_fd) {
+  // No need to read request, has no extra data
   (void)req_fd;
 
   size_t event_count = 0;
-  unsigned int *data = ems_list_events_to_client(&event_count);
+  unsigned int* data = ems_list_events_to_client(&event_count);
 
   list_response resp;
   resp.num_events = event_count;
   resp.return_code = data == NULL ? 1 : 0;
-  if(write(resp_fd, &resp, sizeof(list_response)) == -1)
-  {
+  if (write(resp_fd, &resp, sizeof(list_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
 
-  //TODO: Error checking
+  // TODO: Error checking
   write(resp_fd, data, sizeof(unsigned int) * event_count);
 }
