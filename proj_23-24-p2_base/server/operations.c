@@ -326,3 +326,41 @@ int ems_list_events(int out_fd) {
   pthread_rwlock_unlock(&event_list->rwl);
   return 0;
 }
+
+
+int* ems_list_events_to_client(size_t* length){
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return NULL;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return NULL;
+  }
+
+  struct ListNode* to = event_list->tail;
+  struct ListNode* current = event_list->head;
+
+  if (current == NULL) {
+    *length=0;
+    pthread_rwlock_unlock(&event_list->rwl);
+    return NULL;
+  }
+
+  int* events = malloc(sizeof(int) * event_list->size);
+
+  int i=0;
+  while (1) {
+    events[i]=(current->event)->id;
+    i++;
+    if (current == to) {
+      break;
+    }
+
+    current = current->next;
+  }
+  *length=event_list->size*sizeof(int);
+  pthread_rwlock_unlock(&event_list->rwl);
+  return events;
+}

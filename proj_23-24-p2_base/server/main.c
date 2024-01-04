@@ -152,7 +152,7 @@ void handle_SIGUSR1(int signum) {
   struct ListNode* node = event_list->head;
   while (node != NULL) {
     pthread_mutex_lock(&node->event->mutex);
-    ems_show(1, node->event);
+    ems_show(1,node->event->id);
     pthread_mutex_unlock(&node->event->mutex);
     node = node->next;
   }

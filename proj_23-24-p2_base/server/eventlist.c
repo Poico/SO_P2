@@ -5,6 +5,7 @@
 
 struct EventList* create_list() {
   struct EventList* list = (struct EventList*)malloc(sizeof(struct EventList));
+  list->size = 0;
   if (!list) return NULL;
   if (pthread_rwlock_init(&list->rwl, NULL) != 0) {
     free(list);
@@ -17,7 +18,7 @@ struct EventList* create_list() {
 
 int append_to_list(struct EventList* list, struct Event* event) {
   if (!list) return 1;
-
+  list->size++;
   struct ListNode* new_node = (struct ListNode*)malloc(sizeof(struct ListNode));
   if (!new_node) return 1;
 

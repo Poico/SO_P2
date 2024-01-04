@@ -38,9 +38,14 @@ int ems_show(int out_fd, unsigned int event_id);
 int ems_list_events(int out_fd);
 
 /// Returns all the events in array.
-/// @param event_id Id of the event to print.
+/// @param event_id Id of the event to return.
 /// @param length length of the array
 /// @return array of events
 int* ems_show_to_client(unsigned int event_id,size_t* length);
+
+/// Returns all the events in array.
+/// @param length length of the array
+/// @return array of events
+int* ems_list_events_to_client(size_t* length);
 
 #endif  // SERVER_OPERATIONS_H
