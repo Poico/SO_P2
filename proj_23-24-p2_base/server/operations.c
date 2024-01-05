@@ -234,47 +234,6 @@ int ems_show(int out_fd, unsigned int event_id) {
   return 0;
 }
 
-
-unsigned int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_cols){
-  if (event_list == NULL) {
-    fprintf(stderr, "EMS state must be initialized\n");
-    return NULL;
-  }
-
-  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
-    fprintf(stderr, "Error locking list rwl\n");
-    return NULL;
-  }
-
-  struct Event* event = get_event_with_delay(event_id, event_list->head, event_list->tail);
-
-  pthread_rwlock_unlock(&event_list->rwl);
-
-  if (event == NULL) {
-    fprintf(stderr, "Event not found\n");
-    return NULL;
-  }
-
-  if (pthread_mutex_lock(&event->mutex) != 0) {
-    fprintf(stderr, "Error locking mutex\n");
-    return NULL;
-  }
-
-  unsigned int* seats = malloc(sizeof(unsigned int) * event->rows * event->cols);
-
-  for (size_t i = 1; i <= event->rows; i++) {
-    for (size_t j = 1; j <= event->cols; j++) {
-      seats[seat_index(event, i, j)] = event->data[seat_index(event, i, j)];
-    }
-  }
-
-  *num_rows = event->rows;
-  *num_cols = event->cols;
-
-  pthread_mutex_unlock(&event->mutex);
-  return seats;
-}
-
 int ems_list_events(int out_fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -329,7 +288,9 @@ int ems_list_events(int out_fd) {
 }
 
 
-unsigned int* ems_list_events_to_client(size_t* length){
+
+unsigned int* ems_show_to_client(unsigned int event_id, size_t *num_rows, size_t *num_cols){
+  //Verify initial conditions
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return NULL;
@@ -340,28 +301,79 @@ unsigned int* ems_list_events_to_client(size_t* length){
     return NULL;
   }
 
+  //Get event and lock it
+  struct Event* event = get_event_with_delay(event_id, event_list->head, event_list->tail);
+  pthread_rwlock_unlock(&event_list->rwl);
+
+  //Validate
+  if (event == NULL) {
+    fprintf(stderr, "Event not found\n");
+    return NULL;
+  }
+  if (pthread_mutex_lock(&event->mutex) != 0) {
+    fprintf(stderr, "Error locking mutex\n");
+    return NULL;
+  }
+
+  //Read seat list
+  unsigned int* seats = malloc(sizeof(unsigned int) * event->rows * event->cols);
+
+  for (size_t i = 1; i <= event->rows; i++) {
+    for (size_t j = 1; j <= event->cols; j++) {
+      seats[seat_index(event, i, j)] = event->data[seat_index(event, i, j)];
+    }
+  }
+
+  //Set size arguments
+  *num_rows = event->rows;
+  *num_cols = event->cols;
+
+  //Unlock and return
+  pthread_mutex_unlock(&event->mutex);
+  return seats;
+}
+
+unsigned int* ems_list_events_to_client(size_t* length){
+  //Verify initial conditions
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return NULL;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return NULL;
+  }
+
+  //Get element pointers
   struct ListNode* to = event_list->tail;
   struct ListNode* current = event_list->head;
 
+  //Handle empty list
   if (current == NULL) {
     *length=0;
     pthread_rwlock_unlock(&event_list->rwl);
     return NULL;
   }
 
+  //Create array
   unsigned int* events = malloc(sizeof(unsigned int) * (size_t)event_list->size);
 
-  int i=0;
+  //Read event ids
+  int i = 0;
   while (1) {
-    events[i]=(current->event)->id;
-    i++;
-    if (current == to) {
+    events[i++]=(current->event)->id;
+
+    if (current == to) 
       break;
-    }
 
     current = current->next;
   }
+
+  //Set size arguments
   *length=(size_t)event_list->size * sizeof(unsigned int);
+
+  //Unlock and return
   pthread_rwlock_unlock(&event_list->rwl);
   return events;
 }

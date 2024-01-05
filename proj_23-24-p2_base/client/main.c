@@ -14,13 +14,11 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  printf("EMS setup.1\n");
   if (ems_setup(argv[1], argv[2], argv[3])) {
     fprintf(stderr, "Failed to set up EMS\n");
     return 1;
   }
 
-  printf("Open jobs.\n");
   const char* dot = strrchr(argv[4], '.');
   if (dot == NULL || dot == argv[4] || strlen(dot) != 5 || strcmp(dot, ".jobs") ||
       strlen(argv[4]) > MAX_JOB_FILE_NAME_SIZE) {
@@ -44,7 +42,6 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  printf("Command loop.\n");
   while (1) {
     unsigned int event_id;
     size_t num_rows, num_columns, num_coords;
@@ -123,6 +120,4 @@ int main(int argc, char* argv[]) {
         return 0;
     }
   }
-
-  printf("Done.\n");
 }
