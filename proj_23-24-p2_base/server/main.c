@@ -20,14 +20,13 @@
 #define BUFFER_SIZE 4
 
 int parse_args(int argc, char* argv[]);
-void init_server();
+int init_server();
 
 void accept_client();
 void handle_client(unsigned int session_id, int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
 void handle_SIGINT(int signum);
-void close_server_threads();
 int process_command(int req_fd, int resp_fd);
 void handle_create(int req_fd, int resp_fd);
 void handle_reserve(int req_fd, int resp_fd);
@@ -36,9 +35,12 @@ void handle_list(int req_fd, int resp_fd);
 void* worker_thread_main(void* arg);
 
 unsigned int state_access_delay_us;
+
 int registerFIFO;
 char* FIFO_path;
+
 volatile char server_should_quit;
+volatile char show_flag = 0;
 
 pthread_t worker_threads[MAX_SESSION_COUNT];
 unsigned int thread_args[MAX_SESSION_COUNT];
@@ -52,28 +54,35 @@ pthread_mutex_t buffer_mutex;
 pthread_cond_t buffer_not_full;
 pthread_cond_t buffer_not_empty;
 
-volatile char show_flag = 0;  // no need for thread safety, not important
+
 
 int main(int argc, char* argv[]) {
   int ret = parse_args(argc, argv);
   if (ret) return ret;
 
-  signal(SIGUSR1, handle_SIGUSR1);
-  signal(SIGINT, handle_SIGINT);
+  ret = init_server();
+  if (ret) return ret;
 
-  init_server();
-
+  //Main execution loop
   while (!server_should_quit) {
     accept_client();
 
+    //Print requested data if flag is set
     if (show_flag) {
+      //Reset flag (not using mutexes, not important given the use case)
       show_flag = 0;
 
+      //Always print messge to acknowledge signal, even if event listing fails
+      write(1, "Listing all events:\n", 20);
+
+      //Get list of all events
       size_t count;
       unsigned int* data = ems_list_events_to_client(&count);
 
+      //Ignore if error
       if (data == NULL) continue;
 
+      //Actually do the printing
       for (size_t i = 0; i < count; i++) {
         char buff[32];
         snprintf(buff, 32, "Event %d:\n", data[i]);
@@ -86,12 +95,46 @@ int main(int argc, char* argv[]) {
   close_server();
 }
 
+void* worker_thread_main(void* arg) {
+  //Get session id (=thread id) from arg
+  unsigned int session_id = *((unsigned int*)arg);
+
+  //Block SIGUSR1
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGUSR1);
+  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
+  //Work loop
+  while (1) {
+    //Fetch request to processs
+    setup_request request = buffer_get();
+    
+    //Open provided pipes
+    int req_fd, resp_fd;
+    if ((req_fd = open(request.request_fifo_name, O_RDONLY)) == -1) {
+      fprintf(stderr, "Error opening request pipe\n");
+      exit(1);
+    }
+    if ((resp_fd = open(request.response_fifo_name, O_WRONLY)) == -1) {
+      fprintf(stderr, "Error opening response pipe\n");
+      exit(1);
+    }
+
+    handle_client(session_id, req_fd, resp_fd);
+  }
+}
+
+
+//===Server startup===
 int parse_args(int argc, char* argv[]) {
+  //Error if invalid arguments
   if (argc < 2 || argc > 3) {
     fprintf(stderr, "Usage: %s\n <pipe_path> [delay]\n", argv[0]);
     return 1;
   }
 
+  //Parse access_delay
   char* endptr;
   state_access_delay_us = STATE_ACCESS_DELAY_US;
   if (argc == 3) {
@@ -104,6 +147,8 @@ int parse_args(int argc, char* argv[]) {
 
     state_access_delay_us = (unsigned int)delay;
   }
+
+  //Process pipe path
   if (argc >= 2) {
     FIFO_path = argv[1];
   }
@@ -111,28 +156,41 @@ int parse_args(int argc, char* argv[]) {
   return 0;
 }
 
-void init_server() {
+int init_server() {
+  //[Delete and] create and open request pipe
   unlink(FIFO_path);
   mkfifo(FIFO_path, FIFO_PERMS);
   registerFIFO = open(FIFO_path, O_RDWR);
 
+  //Initialize synchronization methods for producer-consumer buffer
   pthread_mutex_init(&buffer_mutex, NULL);
   pthread_cond_init(&buffer_not_full, NULL);
   pthread_cond_init(&buffer_not_empty, NULL);
 
+  //Launch worker threads
   for (int i = 0; i < MAX_SESSION_COUNT; i++) {
     thread_args[i] = (unsigned int)i;
     pthread_create(&worker_threads[i], NULL, worker_thread_main, &thread_args[i]);
   }
-  server_should_quit = 0;
 
-  // Initialize EMS
+  //Initialize EMS
   if (ems_init(state_access_delay_us)) {
     fprintf(stderr, "Failed to initialize EMS\n");
     return 1;
   }
+
+  //Register signal handlers
+  signal(SIGUSR1, handle_SIGUSR1);
+  signal(SIGINT, handle_SIGINT);
+
+  //Set main loop condition
+  server_should_quit = 0;
+
+  return 0;
 }
 
+
+//===Client handling===
 void accept_client() {
   char opcode;
   if (read(registerFIFO, &opcode, sizeof(char)) == -1) {
@@ -165,46 +223,6 @@ void accept_client() {
   printf("Producer produced.\n");
 }
 
-void* worker_thread_main(void* arg) {
-  printf("Thread start.\n");
-  unsigned int session_id = *((unsigned int*)arg);
-
-  sigset_t sigset;
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGUSR1);
-  pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
-  while (1) {
-    pthread_mutex_lock(&buffer_mutex);
-    while (in == out) pthread_cond_wait(&buffer_not_empty, &buffer_mutex);
-    setup_request request = buffer[out];
-
-    printf("Consumer is consuming...\n");
-    out = (out + 1) % BUFFER_SIZE;
-    // Signal that buffer is not full
-    pthread_cond_signal(&buffer_not_full);
-    // Unlock mutex
-    pthread_mutex_unlock(&buffer_mutex);
-    printf("Consumer consumed.\n");
-
-    printf("Received paths '%s' and '%s'.\n", request.request_fifo_name, request.response_fifo_name);
-
-    int req_fd, resp_fd;
-
-    if ((req_fd = open(request.request_fifo_name, O_RDONLY)) == -1) {
-      fprintf(stderr, "Error opening request pipe\n");
-      exit(1);
-    }
-    if ((resp_fd = open(request.response_fifo_name, O_WRONLY)) == -1) {
-      fprintf(stderr, "Error opening response pipe\n");
-      exit(1);
-    }
-
-    handle_client(session_id, req_fd, resp_fd);
-  }
-}
-
-// Each worker thread enters this function once for each client
 void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
   setup_response resp = {.session_id = session_id};
 
@@ -233,45 +251,8 @@ void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
   printf("Going to sleep.\n");
 }
 
-void close_server() {
-  if (close(registerFIFO) == -1) {
-    fprintf(stderr, "Error closing register FIFO\n");
-    exit(1);
-  }
-  if (unlink(FIFO_path) == -1) {
-    fprintf(stderr, "Error deleting register FIFO\n");
-    exit(1);
-  }
-  close_server_threads();
-  pthread_mutex_destroy(&buffer_mutex);
-  pthread_cond_destroy(&buffer_not_full);
-  pthread_cond_destroy(&buffer_not_empty);
-  ems_terminate();
-  exit(0);
-}
 
-void handle_SIGUSR1(int signum) {
-  (void)signum;
-  show_flag = 1;
-
-  signal(SIGUSR1, handle_SIGUSR1);
-}
-
-void handle_SIGINT(int signum)
-{
-  (void)signum;
-  server_should_quit = 1;
-
-  //Not needed: signal(SIGINT, handle_SIGINT);
-  //Also helpful in case exit code fails and an actual Ctrl+C is needed
-}
-
-void close_server_threads() {
-  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-    pthread_cancel(worker_threads[i]);
-  }
-}
-
+//===Command processing and handling===
 int process_command(int req_fd, int resp_fd) {
   core_request core;
   if (read(req_fd, &core, sizeof(core_request)) == -1) {
@@ -411,4 +392,66 @@ void handle_list(int req_fd, int resp_fd) {
   }
 
   free(data);
+}
+
+
+//===Server shutdown===
+void close_server_threads() {
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    pthread_cancel(worker_threads[i]);
+  }
+}
+
+void close_server() {
+  if (close(registerFIFO) == -1) {
+    fprintf(stderr, "Error closing register FIFO\n");
+    exit(1);
+  }
+  if (unlink(FIFO_path) == -1) {
+    fprintf(stderr, "Error deleting register FIFO\n");
+    exit(1);
+  }
+  close_server_threads();
+  pthread_mutex_destroy(&buffer_mutex);
+  pthread_cond_destroy(&buffer_not_full);
+  pthread_cond_destroy(&buffer_not_empty);
+  ems_terminate();
+  exit(0);
+}
+
+
+//===Signal handling===
+void handle_SIGUSR1(int signum) {
+  (void)signum;
+  show_flag = 1;
+
+  signal(SIGUSR1, handle_SIGUSR1);
+}
+
+void handle_SIGINT(int signum)
+{
+  (void)signum;
+  server_should_quit = 1;
+
+  //Not needed: signal(SIGINT, handle_SIGINT);
+  //Also helpful in case exit code fails and an actual Ctrl+C is needed
+}
+
+
+
+setup_request buffer_get()
+{
+  //Lock buffer
+  pthread_mutex_lock(&buffer_mutex);
+  //Wait for required condition
+  while (in == out) pthread_cond_wait(&buffer_not_empty, &buffer_mutex);
+  //Fetch from buffer and increment tail
+  setup_request ret = buffer[out];
+  out = (out + 1) % BUFFER_SIZE;
+  //Signal that buffer is not full
+  pthread_cond_signal(&buffer_not_full);
+  //Unlock buffer
+  pthread_mutex_unlock(&buffer_mutex);
+
+  return ret;
 }
