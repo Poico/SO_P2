@@ -376,7 +376,7 @@ unsigned int* ems_list_events_to_client(size_t* length){
   }
 
   //Set size arguments
-  *length=(size_t)event_list->size * sizeof(unsigned int);
+  *length=(size_t)event_list->size;
 
   //Unlock and return
   pthread_rwlock_unlock(&event_list->rwl);

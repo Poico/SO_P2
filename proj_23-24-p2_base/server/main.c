@@ -30,6 +30,7 @@ void handle_SIGINT(int signum);
 int process_command(int req_fd, int resp_fd);
 setup_request buffer_get();
 void buffer_add(setup_request request);
+void list_events();
 
 //===Parsed arguments===
 unsigned int state_access_delay_us;
@@ -71,20 +72,7 @@ int main(int argc, char* argv[]) {
       //Always print messge to acknowledge signal, even if event listing fails
       write(1, "Listing all events:\n", 20);
 
-      //Get list of all events
-      size_t count;
-      unsigned int* data = ems_list_events_to_client(&count);
-
-      //Ignore if error
-      if (data == NULL) continue;
-
-      //Actually do the printing
-      for (size_t i = 0; i < count; i++) {
-        char buff[32];
-        snprintf(buff, 32, "Event %d:\n", data[i]);
-        write(1, buff, strlen(buff));
-        ems_show(1, data[i]);
-      }
+      list_events();
     }
   }
 
@@ -190,7 +178,7 @@ int init_server() {
 void accept_client() {
   //Read opcode (should be =1)
   char opcode;
-  if (read(registerFIFO, &opcode, sizeof(char)) == -1) {
+  if (read(registerFIFO, &opcode, sizeof(char)) != -1) {
     if (errno == 4) { return; }  // ignore error if "Interrupted system call"
     fprintf(stderr, "Error reading from pipe while accepting client: %d.\n", errno);
     exit(1);
@@ -465,7 +453,7 @@ void handle_SIGINT(int signum)
 }
 
 
-
+//===Buffer operations===
 setup_request buffer_get()
 {
   //Lock buffer
@@ -496,4 +484,24 @@ void buffer_add(setup_request request)
   pthread_cond_signal(&buffer_not_empty);
   //Unlock buffer
   pthread_mutex_unlock(&buffer_mutex);
+}
+
+
+//===Readability===
+void list_events()
+{
+  //Get list of all events
+  size_t count;
+  unsigned int* data = ems_list_events_to_client(&count);
+
+  //Ignore if error
+  if (data == NULL) return;
+
+  //Actually do the printing
+  for (size_t i = 0; i < count; i++) {
+    char buff[32];
+    snprintf(buff, 32, "Event %d:\n", data[i]);
+    write(1, buff, strlen(buff));
+    ems_show(1, data[i]);
+  }
 }
