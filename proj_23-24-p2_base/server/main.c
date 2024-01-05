@@ -26,6 +26,7 @@ void accept_client();
 void handle_client(unsigned int session_id, int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
+void handle_SIGINT(int signum);
 void close_server_threads();
 int process_command(int req_fd, int resp_fd);
 void handle_create(int req_fd, int resp_fd);
@@ -58,18 +59,10 @@ int main(int argc, char* argv[]) {
   if (ret) return ret;
 
   signal(SIGUSR1, handle_SIGUSR1);
+  signal(SIGINT, handle_SIGINT);
 
-  printf("Init EMS.\n");
-  // Initialize EMS
-  if (ems_init(state_access_delay_us)) {
-    fprintf(stderr, "Failed to initialize EMS\n");
-    return 1;
-  }
-
-  printf("Init server.\n");
   init_server();
 
-  printf("Work loop.\n");
   while (!server_should_quit) {
     accept_client();
 
@@ -81,7 +74,6 @@ int main(int argc, char* argv[]) {
 
       if (data == NULL) continue;
 
-      write(1, "Listing all events:\n", 20);
       for (size_t i = 0; i < count; i++) {
         char buff[32];
         snprintf(buff, 32, "Event %d:\n", data[i]);
@@ -91,7 +83,6 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  printf("Close server.\n");
   close_server();
 }
 
@@ -122,7 +113,7 @@ int parse_args(int argc, char* argv[]) {
 
 void init_server() {
   unlink(FIFO_path);
-  mkfifo(FIFO_path, 0666);
+  mkfifo(FIFO_path, FIFO_PERMS);
   registerFIFO = open(FIFO_path, O_RDWR);
 
   pthread_mutex_init(&buffer_mutex, NULL);
@@ -134,6 +125,12 @@ void init_server() {
     pthread_create(&worker_threads[i], NULL, worker_thread_main, &thread_args[i]);
   }
   server_should_quit = 0;
+
+  // Initialize EMS
+  if (ems_init(state_access_delay_us)) {
+    fprintf(stderr, "Failed to initialize EMS\n");
+    return 1;
+  }
 }
 
 void accept_client() {
@@ -156,7 +153,6 @@ void accept_client() {
   printf("Producer is producing...\n");
   pthread_mutex_lock(&buffer_mutex);
   // Wait for buffer to not be full
-  // TODO: the problem is that I'm adding in+1 and not keep tracking of the number of elements
   while ((in + 1) % BUFFER_SIZE == out) pthread_cond_wait(&buffer_not_full, &buffer_mutex);
   // Add request to buffer
   buffer[in] = request;
@@ -182,7 +178,6 @@ void* worker_thread_main(void* arg) {
     pthread_mutex_lock(&buffer_mutex);
     while (in == out) pthread_cond_wait(&buffer_not_empty, &buffer_mutex);
     setup_request request = buffer[out];
-    out = (out + 1) % BUFFER_SIZE;
 
     printf("Consumer is consuming...\n");
     out = (out + 1) % BUFFER_SIZE;
@@ -239,18 +234,18 @@ void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
 }
 
 void close_server() {
-  if (unlink(FIFO_path) == -1) {
-    fprintf(stderr, "Error deleting register FIFO\n");
-    exit(1);
-  }
   if (close(registerFIFO) == -1) {
     fprintf(stderr, "Error closing register FIFO\n");
     exit(1);
   }
+  if (unlink(FIFO_path) == -1) {
+    fprintf(stderr, "Error deleting register FIFO\n");
+    exit(1);
+  }
+  close_server_threads();
   pthread_mutex_destroy(&buffer_mutex);
   pthread_cond_destroy(&buffer_not_full);
   pthread_cond_destroy(&buffer_not_empty);
-  close_server_threads();
   ems_terminate();
   exit(0);
 }
@@ -259,9 +254,16 @@ void handle_SIGUSR1(int signum) {
   (void)signum;
   show_flag = 1;
 
-  printf("USR1\n");
-
   signal(SIGUSR1, handle_SIGUSR1);
+}
+
+void handle_SIGINT(int signum)
+{
+  (void)signum;
+  server_should_quit = 1;
+
+  //Not needed: signal(SIGINT, handle_SIGINT);
+  //Also helpful in case exit code fails and an actual Ctrl+C is needed
 }
 
 void close_server_threads() {

@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "common/constants.h"
+
 static int req_fd, resp_fd;
 static unsigned session_id;
 
@@ -18,10 +20,10 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   unlink(resp_pipe_path);
   
   printf("Creating pipes.\n");
-  if (mkfifo(req_pipe_path, 0666) == -1) {
+  if (mkfifo(req_pipe_path, FIFO_PERMS) == -1) {
     return 1;
   }
-  if (mkfifo(resp_pipe_path, 0666) == -1) {
+  if (mkfifo(resp_pipe_path, FIFO_PERMS) == -1) {
     return 1;
   }
   
