@@ -32,7 +32,7 @@ run_cli: client/client
 clean:
 	rm -f common/*.o client/*.o server/*.o server/ems client/client
 	-@unlink req
-	-@unlinq resp
+	-@unlink resp
 	-@unlink main
 
 format:
