@@ -215,21 +215,22 @@ void accept_client() {
 }
 
 void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
+  //Build initial response
   setup_response resp = {.session_id = session_id};
 
+  //Send initial response
   if (write(resp_fd, &resp, sizeof(setup_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     exit(1);
   }
 
+  //Set thread work loop condition and enter
   int should_work = 1;
-
   while (should_work) {
     should_work = process_command(req_fd, resp_fd);
   }
 
-  printf("Done with client.\n");
-
+  //Close client pipes
   if (close(req_fd) == -1) {
     fprintf(stderr, "Error closing client pipe\n");
     exit(1);
@@ -239,20 +240,23 @@ void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
     exit(1);
   }
 
-  printf("Going to sleep.\n");
+  //Return to "sleep" state
 }
 
 
 //===Command processing and handling===
 void handle_create(int req_fd, int resp_fd) {
+  //Read request data
   create_request req;
   if (read(req_fd, &req, sizeof(create_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
+  //Perform requested action
   int ret = ems_create(req.event_id, req.num_rows, req.num_cols);
 
+  //Build and send response
   create_response resp = {.return_code = ret};
   if (write(resp_fd, &resp, sizeof(create_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
@@ -261,12 +265,14 @@ void handle_create(int req_fd, int resp_fd) {
 }
 
 void handle_reserve(int req_fd, int resp_fd) {
+  //Read request data
   reserve_request req;
   if (read(req_fd, &req, sizeof(reserve_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
+  //Read provided arrays
   size_t* xs = malloc(req.num_seats * sizeof(size_t));
   size_t* ys = malloc(req.num_seats * sizeof(size_t));
   if (read(req_fd, xs, req.num_seats * sizeof(size_t)) == -1) {
@@ -275,7 +281,6 @@ void handle_reserve(int req_fd, int resp_fd) {
     free(ys);
     exit(1);
   }
-
   if (read(req_fd, ys, req.num_seats * sizeof(size_t)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     free(xs);
@@ -283,11 +288,14 @@ void handle_reserve(int req_fd, int resp_fd) {
     exit(1);
   }
 
+  //Perform requested action
   int ret = ems_reserve(req.event_id, req.num_seats, xs, ys);
 
+  //Memory cleanup
   free(xs);
   free(ys);
 
+  //Build and send response
   reserve_response resp = {.return_code = ret};
   if (write(resp_fd, &resp, sizeof(reserve_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
@@ -296,32 +304,36 @@ void handle_reserve(int req_fd, int resp_fd) {
 }
 
 void handle_show(int req_fd, int resp_fd) {
+  //Read request data
   show_request req;
   if (read(req_fd, &req, sizeof(show_request)) == -1) {
     fprintf(stderr, "Error reading from pipe\n");
     exit(1);
   }
 
+  //Perform requested action
   size_t rows = 0, cols = 0;
   unsigned int* data = ems_show_to_client(req.event_id, &rows, &cols);
 
+  //Build and send response
   show_response resp;
   resp.num_cols = cols;
   resp.num_rows = rows;
   resp.return_code = data == NULL ? 1 : 0;
-
   if (write(resp_fd, &resp, sizeof(show_response)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     free(data);
     exit(1);
   }
 
+  //Send returned data
   if (write(resp_fd, data, sizeof(unsigned int) * rows * cols) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     free(data);
     exit(1);
   }
 
+  //Memory cleanup
   free(data);
 }
 
@@ -329,9 +341,11 @@ void handle_list(int req_fd, int resp_fd) {
   // No need to read request, has no extra data
   (void)req_fd;
 
+  //Perform requested action
   size_t event_count = 0;
   unsigned int* data = ems_list_events_to_client(&event_count);
 
+  //Build and send response
   list_response resp;
   resp.num_events = event_count;
   resp.return_code = data == NULL ? 1 : 0;
@@ -341,22 +355,32 @@ void handle_list(int req_fd, int resp_fd) {
     exit(1);
   }
 
+  //Send returned data
   if (write(resp_fd, data, event_count * sizeof(unsigned int)) == -1) {
     fprintf(stderr, "Error writing to pipe\n");
     free(data);
     exit(1);
   }
 
+  //Memory cleanup
   free(data);
 }
 
+/// @return 1 if command was processed successfully, 1 if error or client handling complete (MSG_QUIT)
 int process_command(int req_fd, int resp_fd) {
+  //Read core request
   core_request core;
   if (read(req_fd, &core, sizeof(core_request)) == -1) {
     fprintf(stderr, "Error reading from pipe while reading core: %d.\n", errno);
     exit(1);
   }
 
+  //Could check session_id, not required
+  //session_id could be associated to the client pipes
+  //but since our pipe fd are stored in the thread stack
+  //this is unnecessary
+
+  //Take action depending on provided opcode
   switch (core.opcode) {
     case MSG_QUIT:
       return 0;
@@ -376,6 +400,7 @@ int process_command(int req_fd, int resp_fd) {
     case MSG_LIST:
       break;
 
+    //Error on invalid msg or invalid situation
     case MSG_SETUP:
     default:
       fprintf(stderr, "Invalid opcode\n");
@@ -388,24 +413,30 @@ int process_command(int req_fd, int resp_fd) {
 
 //===Server shutdown===
 void close_server_threads() {
+  //Cancel all threads, disregarding their state
   for (int i = 0; i < MAX_SESSION_COUNT; i++) {
     pthread_cancel(worker_threads[i]);
   }
 }
 
 void close_server() {
+  //Close server pipe
   if (close(registerFIFO) == -1) {
     fprintf(stderr, "Error closing register FIFO\n");
     exit(1);
   }
+  //Delete server pipe
   if (unlink(FIFO_path) == -1) {
     fprintf(stderr, "Error deleting register FIFO\n");
     exit(1);
   }
+  //Close threads and destroy producer-consumer buffer thread safety objects
   close_server_threads();
   pthread_mutex_destroy(&buffer_mutex);
   pthread_cond_destroy(&buffer_not_full);
   pthread_cond_destroy(&buffer_not_empty);
+
+  //Cleanup EMS and exit
   ems_terminate();
   exit(0);
 }
@@ -414,18 +445,23 @@ void close_server() {
 //===Signal handling===
 void handle_SIGUSR1(int signum) {
   (void)signum;
+
+  //Set flag
   show_flag = 1;
 
+  //Re-register handler (might have been auto-cleared)
   signal(SIGUSR1, handle_SIGUSR1);
 }
 
 void handle_SIGINT(int signum)
 {
   (void)signum;
+
+  //Clear main loop condition
   server_should_quit = 1;
 
-  //Not needed: signal(SIGINT, handle_SIGINT);
-  //Also helpful in case exit code fails and an actual Ctrl+C is needed
+  //Not needed: re-register handler with signal(SIGINT, handle_SIGINT);
+  //Helpful in case exit code fails and an actual Ctrl+C is needed
 }
 
 
