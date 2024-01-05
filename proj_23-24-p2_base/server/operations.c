@@ -23,6 +23,11 @@ static struct Event* get_event_with_delay(unsigned int event_id, struct ListNode
   return get_event(event_list, event_id, from, to);
 }
 
+/**
+ * Retrieves the event list.
+ *
+ * @return A pointer to the event list.
+ */
 struct EventList* get_event_list(){
   return event_list;
 }
