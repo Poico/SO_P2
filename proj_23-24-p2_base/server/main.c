@@ -156,6 +156,7 @@ void accept_client() {
   printf("Producer is producing...\n");
   pthread_mutex_lock(&buffer_mutex);
   // Wait for buffer to not be full
+  // TODO: the problem is that I'm adding in+1 and not keep tracking of the number of elements
   while ((in + 1) % BUFFER_SIZE == out) pthread_cond_wait(&buffer_not_full, &buffer_mutex);
   // Add request to buffer
   buffer[in] = request;
