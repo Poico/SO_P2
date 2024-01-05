@@ -178,7 +178,7 @@ int init_server() {
 void accept_client() {
   //Read opcode (should be =1)
   char opcode;
-  if (read(registerFIFO, &opcode, sizeof(char)) != -1) {
+  if (read(registerFIFO, &opcode, sizeof(char)) == -1) {
     if (errno == 4) { return; }  // ignore error if "Interrupted system call"
     fprintf(stderr, "Error reading from pipe while accepting client: %d.\n", errno);
     exit(1);
