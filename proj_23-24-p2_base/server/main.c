@@ -19,37 +19,33 @@
 
 #define BUFFER_SIZE 4
 
+//===Internal function declarations===
 int parse_args(int argc, char* argv[]);
 int init_server();
-
 void accept_client();
 void handle_client(unsigned int session_id, int req_fd, int resp_fd);
 void close_server();
 void handle_SIGUSR1(int signum);
 void handle_SIGINT(int signum);
 int process_command(int req_fd, int resp_fd);
-void handle_create(int req_fd, int resp_fd);
-void handle_reserve(int req_fd, int resp_fd);
-void handle_show(int req_fd, int resp_fd);
-void handle_list(int req_fd, int resp_fd);
-void* worker_thread_main(void* arg);
+setup_request buffer_get();
+void buffer_add(setup_request request);
 
+//===Parsed arguments===
 unsigned int state_access_delay_us;
-
-int registerFIFO;
 char* FIFO_path;
 
+//===Server state and flags===
+int registerFIFO;
 volatile char server_should_quit;
 volatile char show_flag = 0;
 
+//===Producer consumer buffer===
 pthread_t worker_threads[MAX_SESSION_COUNT];
 unsigned int thread_args[MAX_SESSION_COUNT];
-
-// Buffer to hold client requests
 setup_request buffer[BUFFER_SIZE];
 int in = 0;
 int out = 0;
-
 pthread_mutex_t buffer_mutex;
 pthread_cond_t buffer_not_full;
 pthread_cond_t buffer_not_empty;
@@ -192,35 +188,30 @@ int init_server() {
 
 //===Client handling===
 void accept_client() {
+  //Read opcode (should be =1)
   char opcode;
   if (read(registerFIFO, &opcode, sizeof(char)) == -1) {
-    if (errno == 4)  // Interrupted system call
-    {
-      return;
-    }  // ignore
+    if (errno == 4) { return; }  // ignore error if "Interrupted system call"
     fprintf(stderr, "Error reading from pipe while accepting client: %d.\n", errno);
     exit(1);
   }
 
+  //Error on invalid setup opcode
+  if (opcode != MSG_SETUP)
+  {
+    fprintf(stderr, "Invalid setup opcode %d. Expected %d.\n", opcode, MSG_SETUP);
+    exit(1);
+  }
+
+  //Read setup data (pipe names)
   setup_request request;
   if (read(registerFIFO, &request, sizeof(setup_request)) == -1) {
     fprintf(stderr, "Error reading from pipe while accepting client paths: %d.\n", errno);
     exit(1);
   }
 
-  printf("Producer is producing...\n");
-  pthread_mutex_lock(&buffer_mutex);
-  // Wait for buffer to not be full
-  while ((in + 1) % BUFFER_SIZE == out) pthread_cond_wait(&buffer_not_full, &buffer_mutex);
-  // Add request to buffer
-  buffer[in] = request;
-  in = (in + 1) % BUFFER_SIZE;
-  // Signal that buffer is not empty
-  pthread_cond_signal(&buffer_not_empty);
-  // Unlock mutex
-  pthread_mutex_unlock(&buffer_mutex);
-
-  printf("Producer produced.\n");
+  //Add to producer-consumer buffer for worker threads to handle
+  buffer_add(request);
 }
 
 void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
@@ -253,41 +244,6 @@ void handle_client(unsigned int session_id, int req_fd, int resp_fd) {
 
 
 //===Command processing and handling===
-int process_command(int req_fd, int resp_fd) {
-  core_request core;
-  if (read(req_fd, &core, sizeof(core_request)) == -1) {
-    fprintf(stderr, "Error reading from pipe while reading core: %d.\n", errno);
-    exit(1);
-  }
-
-  switch (core.opcode) {
-    case MSG_QUIT:
-      return 0;
-
-    case MSG_CREATE:
-      handle_create(req_fd, resp_fd);
-      break;
-
-    case MSG_RESERVE:
-      handle_reserve(req_fd, resp_fd);
-      break;
-
-    case MSG_SHOW:
-      handle_show(req_fd, resp_fd);
-      break;
-
-    case MSG_LIST:
-      break;
-
-    case MSG_SETUP:
-    default:
-      fprintf(stderr, "Invalid opcode\n");
-      return 0;
-  }
-
-  return 1;
-}
-
 void handle_create(int req_fd, int resp_fd) {
   create_request req;
   if (read(req_fd, &req, sizeof(create_request)) == -1) {
@@ -394,6 +350,41 @@ void handle_list(int req_fd, int resp_fd) {
   free(data);
 }
 
+int process_command(int req_fd, int resp_fd) {
+  core_request core;
+  if (read(req_fd, &core, sizeof(core_request)) == -1) {
+    fprintf(stderr, "Error reading from pipe while reading core: %d.\n", errno);
+    exit(1);
+  }
+
+  switch (core.opcode) {
+    case MSG_QUIT:
+      return 0;
+
+    case MSG_CREATE:
+      handle_create(req_fd, resp_fd);
+      break;
+
+    case MSG_RESERVE:
+      handle_reserve(req_fd, resp_fd);
+      break;
+
+    case MSG_SHOW:
+      handle_show(req_fd, resp_fd);
+      break;
+
+    case MSG_LIST:
+      break;
+
+    case MSG_SETUP:
+    default:
+      fprintf(stderr, "Invalid opcode\n");
+      return 0;
+  }
+
+  return 1;
+}
+
 
 //===Server shutdown===
 void close_server_threads() {
@@ -454,4 +445,19 @@ setup_request buffer_get()
   pthread_mutex_unlock(&buffer_mutex);
 
   return ret;
+}
+
+void buffer_add(setup_request request)
+{
+  //Lock buffer
+  pthread_mutex_lock(&buffer_mutex);
+  //Wait for buffer to not be full
+  while ((in + 1) % BUFFER_SIZE == out) pthread_cond_wait(&buffer_not_full, &buffer_mutex);
+  //Add request to buffer
+  buffer[in] = request;
+  in = (in + 1) % BUFFER_SIZE;
+  //Signal that buffer is not empty
+  pthread_cond_signal(&buffer_not_empty);
+  //Unlock buffer
+  pthread_mutex_unlock(&buffer_mutex);
 }
